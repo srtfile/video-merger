@@ -25,29 +25,158 @@
 
 
    
+# 🎬 Example Google Drive Links for Video Joiner
+# Place one Google Drive link (or direct video URL) per line.
+# Lines starting with '#' are ignored as comments.
+# Supported formats:
+#   - https://drive.google.com/file/d/<FILE_ID>/view?usp=sharing
+#   - https://drive.google.com/open?id=<FILE_ID>
+#   - https://drive.google.com/uc?id=<FILE_ID>&export=download
+#   - Direct raw File IDs
+#
+# ⚙️ GITHUB ACTIONS (.yml) WORKFLOW DISPATCH OPTIONS:
+#   - batch_range: Specify range of batches to process:
+#       * "1 to 3"  -> processes batch 1, batch 2, and batch 3
+#       * "1-3"     -> processes batch 1, batch 2, and batch 3
+#       * "2-4"     -> processes batch 2, batch 3, and batch 4
+#       * "1, 3"    -> processes batch 1 and batch 3
+#       * "all"     -> processes all batches sequentially with cooldown
+#   - batch_target: Specify a single batch number (e.g. 1, 2) or "all"
+#   - batch_delay:  Cooldown delay in seconds between batches (default: 300 / 5 minutes)
+#
+# 💻 LOCAL CLI USAGE:
+#   python video_joiner.py -g example_links.txt --batch-range "1 to 3"
+#   python video_joiner.py -g example_links.txt --batch-range "2-4"
+#   python video_joiner.py -g example_links.txt --batch-index 1
 
-            7     this is natasha nice romi rain nicolate shea
 
-https://drive.google.com/file/d/12g6NXYOjG_gcWxWdqzTv_ewgVbEcKu58/view?usp=sharing
-https://drive.google.com/file/d/16Kz5f11QJtOV3bibBPKzHzBJSEbHLCUI/view?usp=sharing
-https://drive.google.com/file/d/1F9RckM_LqCAx3xTiV0cY9FE9iWYTGNsj/view?usp=sharing
-https://drive.google.com/file/d/1FM2Bmti76lOBkZNSVeYksJ6gHHTOW8-d/view?usp=sharing
-https://drive.google.com/file/d/1L0MsbTMMS1bVQ-232pn01WvyutnUbZti/view?usp=sharing
-https://drive.google.com/file/d/1LCwfWwKbCM3w65iRCMaPOgfkYnbl7Crh/view?usp=sharing
-https://drive.google.com/file/d/1PsMC0IMoSgJu9G3TAW3o5llZxcMbgS9Y/view?usp=sharing
-https://drive.google.com/file/d/1SsFbyM-Srf4MFUxxVr8DYc8sTNXsM61j/view?usp=sharing
-https://drive.google.com/file/d/1ZALHXbPiCZnaCu-UXElOq3oHUvE39UNs/view?usp=sharing
-https://drive.google.com/file/d/1ZxuHRj1cHhpzzVig1hsN-3bHs2MikC1Z/view?usp=sharing
-https://drive.google.com/file/d/1aKOCX1Q083NvHQMEN93qdoDfsecq30Bu/view?usp=sharing
-https://drive.google.com/file/d/1fb8PAP0tO2Nzjd0M3PnybMMatoJGABAY/view?usp=sharing
-https://drive.google.com/file/d/1l4pYeuPZwqA1XgU3Do0T0Tei1jLnh0xY/view?usp=sharing
-https://drive.google.com/file/d/1nKw86E4zujH19JsWeOCTo8Q3caUtlSgz/view?usp=sharing
-https://drive.google.com/file/d/1nOuN8b8_hy2vIxZLvU4SQBKkQybirfJx/view?usp=sharing
-https://drive.google.com/file/d/1qdj_BYWa-trTV0XX8zCO7Ab5itx9f0or/view?usp=sharing
-https://drive.google.com/file/d/1sGs3DX2G7gqLE5mteSBep8HY4VlIf1kB/view?usp=sharing
-https://drive.google.com/file/d/1sV4VnPfON_ZdSDWrMqb3TAy4JahMEzDv/view?usp=sharing
-https://drive.google.com/file/d/1ucrL9Ynycanfs1tOQ4vFPQTt4gsAiMbN/view?usp=sharing
-https://drive.google.com/file/d/1xJezTeaimRM3Qj77mHK7wKrA6c2ACgOJ/view?usp=sharing
 
-                 this is natasha nice romi rain nicolate shea
+            1     this is savanah bond
 
+https://drive.google.com/file/d/13NJDhGq-mkyV2fWWEQTKHUtQq_g1OD7w/view?usp=sharing
+https://drive.google.com/file/d/15gp5H4e4oTlsOShr3Fl1L8L3svmNfZgt/view?usp=sharing
+https://drive.google.com/file/d/15syfL8GsYwCaZfNf6eb6_takx_qiSGqd/view?usp=sharing
+https://drive.google.com/file/d/17U9-TfKniXHHKUvKNwb83JsGBErQlnq9/view?usp=sharing
+https://drive.google.com/file/d/184Wa2gEjqzu7uu2pAvHxPPWzRidYGWhe/view?usp=sharing
+https://drive.google.com/file/d/1Fy5W9BjS7twgDwSkC395rAn6BPDZlF84/view?usp=sharing
+https://drive.google.com/file/d/1G2W_akExldTgkB4CsfUuCj2FCZI9myLk/view?usp=sharing
+https://drive.google.com/file/d/1GuzFzty_nvaxL7ECBBeLiTBM6I5xSlKG/view?usp=sharing
+https://drive.google.com/file/d/1K0VE5i7zzKt3EvQp8qpn4Py17kJ75vmt/view?usp=sharing
+https://drive.google.com/file/d/1LvrwtvCzjsV8lrCb4b3x5YE8HY_AMYSh/view?usp=sharing
+https://drive.google.com/file/d/1Paixg4UxUtNuXb84ggjslQQojF4z6ywl/view?usp=sharing
+https://drive.google.com/file/d/1Rln99KAKXmxKS835wdKxQVSxVhr4t-0C/view?usp=sharing
+https://drive.google.com/file/d/1UvQCwUwZJwNl4aDioXEYFhn4xX_eyimC/view?usp=sharing
+https://drive.google.com/file/d/1VXYFBEn1sK-VSJa_122D2eSSdbo38GIG/view?usp=sharing
+https://drive.google.com/file/d/1WQ_SRxPOmVZXQ6Y7m7ICW4GR6tZzfyA7/view?usp=sharing
+https://drive.google.com/file/d/1Wpp9T538F-WPfa_MM6k5-9WoW4BKhtHS/view?usp=sharing
+https://drive.google.com/file/d/1Za24YHqBXFcSOsJ2xVG9eRdzITFR8R2_/view?usp=sharing
+https://drive.google.com/file/d/1aWhGQWO0eMBsYAsarH36yJScvqtijmQH/view?usp=sharing
+https://drive.google.com/file/d/1bXXaWHtESWfEH58P8bQYSO2lpxvWZjZz/view?usp=sharing
+https://drive.google.com/file/d/1d-rNFU0vyllB1-GgkYh_5lBvBwEJUk6c/view?usp=sharing
+https://drive.google.com/file/d/1gFv_V90714TCn1ZZgCGDJIo23CFxpNkH/view?usp=sharing
+https://drive.google.com/file/d/1i0URD4jpuhp-pkxIRFTl2vLXBB5cJFxk/view?usp=sharing
+https://drive.google.com/file/d/1oRpe6x2Sd6sgyekmBUQ3kFh8iFme6m1O/view?usp=sharing
+https://drive.google.com/file/d/1pVvji0EXSvjltsPr2m7NyhyqcXr4MwSk/view?usp=sharing
+https://drive.google.com/file/d/1pZzTB9UWP6K97poDHu5g7Do1Lw0nO9E3/view?usp=sharing
+https://drive.google.com/file/d/1rAmkjdnjPBXzvTyHzPx88x4-7GhhtflY/view?usp=sharing
+https://drive.google.com/file/d/1rMbfdyuW3zXb5_lTTTbYMxJ4AWebLGjR/view?usp=sharing
+https://drive.google.com/file/d/1yG2XsOGOCWuiA4sGpNXxpavOQE4wBk8w/view?usp=sharing
+https://drive.google.com/file/d/1zO4WcN1SPlhhA3UwlVo4Mb5k4iMP6JTv/view?usp=sharing
+
+                 this is savanah bond
+
+
+            2     this is blake blossom
+
+https://drive.google.com/file/d/16beHvTMHgx2gZfkVKp6DKxE79Ubyhgp9/view?usp=sharing
+https://drive.google.com/file/d/1DYUFJia_56Anli0ZcQfdR-A08b_o43_B/view?usp=sharing
+https://drive.google.com/file/d/1F6m5ZlQ4xFbBaF8kzolsAKRYwmczX5av/view?usp=sharing
+https://drive.google.com/file/d/1TgqabHi6VkEO41ii9EKTL4usNSX9YdC0/view?usp=sharing
+https://drive.google.com/file/d/1VtZIsk8klYxSsvfm2NTJ9vEwyjMWK51Y/view?usp=sharing
+https://drive.google.com/file/d/1fq-Ntv9o-u-UgnMHCbnLDX1b5D3lENOz/view?usp=sharing
+https://drive.google.com/file/d/1gKfOwp_qQGDlqqiV3ZCPpYK5n8VB_NzE/view?usp=sharing
+https://drive.google.com/file/d/1gufPUJN4dqNKvzO-kk_xI116gB93kNhz/view?usp=sharing
+https://drive.google.com/file/d/1mQWRbGe6FNq15OXbzHh1umIOnNBS2pri/view?usp=sharing
+https://drive.google.com/file/d/1m_pbvgqINxG1egwJGdDjhMFMvcd8GU_K/view?usp=sharing
+https://drive.google.com/file/d/1mjbsr24ss1ONdXbvAmoDwRB3l-MZhfQZ/view?usp=sharing
+https://drive.google.com/file/d/1oIO_o8MAkhoTmALKSVG57gJS_meQDeQE/view?usp=sharing
+https://drive.google.com/file/d/1p2yAiHXepAeSZ42-ZGCKDOaLzgmaHuW7/view?usp=sharing
+https://drive.google.com/file/d/1vy1LI7Pik3DFk3Vdp07BYIbVcrlQNYez/view?usp=sharing
+https://drive.google.com/file/d/1wSnz4GxT43F7Y-4B_RUQsDmF9w6BmE7c/view?usp=sharing
+
+                 this is blake blossom
+
+
+            3     this is cathey heaven
+
+https://drive.google.com/file/d/1Jv1XvlpOmed-TAzSM0JbYQujDCDdeNcW/view?usp=sharing
+https://drive.google.com/file/d/1P9-jaDY8W1bBEMkVm6JEMO6L31VgUURp/view?usp=sharing
+https://drive.google.com/file/d/1e_wOkAL0Yvwi5HpcSkjwS3QM35M6x_AB/view?usp=sharing
+https://drive.google.com/file/d/1ffU0iiHsxo1LNkbTxSiMMu0-8IXHc1T2/view?usp=sharing
+
+                 this is cathey heaven
+
+
+            4     this is lennox luxe
+
+https://drive.google.com/file/d/1q5JfgNhPDPB69Xph38487YEKJPQoN3RS/view?usp=sharing
+https://drive.google.com/file/d/1vCUy6tIpt34LrhutVJ9xe0vhbXD2hkwy/view?usp=sharing
+https://drive.google.com/file/d/1y3iDglQZez6v33fpSg0MbIUz7CizIgp3/view?usp=sharing
+
+                 this is lennox luxe
+
+
+            5     this is mellisa stratton
+
+https://drive.google.com/file/d/10XsxCc0e1qcvBBJF7fdkq9hveX8j07RO/view?usp=sharing
+https://drive.google.com/file/d/13tJVscOdjUqp1Gea0m4sFLzmbUQJ7uAx/view?usp=sharing
+https://drive.google.com/file/d/1AbPYclLcQfUPL3vA14wb4Co16nXkhoEW/view?usp=sharing
+https://drive.google.com/file/d/1DRI1yWj_mT666LRHORgUExNTjuQSyDZP/view?usp=sharing
+https://drive.google.com/file/d/1E5YisEcD1wNcUghznm2Gc5n0-tNKJAxy/view?usp=sharing
+https://drive.google.com/file/d/1UbPc_REOWjT9B0GFPOf90vXZDJKLoY08/view?usp=sharing
+https://drive.google.com/file/d/1kuQDfcpJwda04KZ_zRypPLR6Yti1SWLL/view?usp=sharing
+https://drive.google.com/file/d/1ol7KPmpED1zwSNNUgW2bdmjlrkwPWLDV/view?usp=sharing
+https://drive.google.com/file/d/1qgIqd-cSRdScpzNS3rmYzZNf9gzsPIPh/view?usp=sharing
+
+                 this is mellisa stratton
+
+
+            6     this is nadiea ali
+
+https://drive.google.com/file/d/16m7HeI1d40PNZBXvWiV9PYZ_34wG1_We/view?usp=sharing
+https://drive.google.com/file/d/1JZFfRqCqVLRPR0l7kt_ILDWrYB5rTbKV/view?usp=sharing
+https://drive.google.com/file/d/1NRpo9j8d2XzUC60nBa5PVH2sC4gQyECw/view?usp=sharing
+https://drive.google.com/file/d/1XPN0ntuhLq589bjDURBeb3zufp0vKjn4/view?usp=sharing
+
+                 this is nadiea ali
+
+            8     this is true kai
+
+https://drive.google.com/file/d/1-iWFUGBHiUSCRq01is6I6tnQdDzw_7zN/view?usp=sharing
+https://drive.google.com/file/d/10YviO0TGjM0Ve9Vem8ggLBLXHUyhSWc8/view?usp=sharing
+https://drive.google.com/file/d/13qqsAZbPi914U8EFLJg9kB4p0U0-twks/view?usp=sharing
+https://drive.google.com/file/d/18onADGQIeDfSzH4PELT0z7dMIBSQsu8s/view?usp=sharing
+https://drive.google.com/file/d/1G3AqGeLPSFdJVt2McEjGWCvYs770tfqg/view?usp=sharing
+https://drive.google.com/file/d/1RWUoIBcBA0KXx9fXoWAPl18D4GAjZ-Bz/view?usp=sharing
+https://drive.google.com/file/d/1l_FrO4w_Z9327m0uy8PSI9aeffi0CEhn/view?usp=sharing
+https://drive.google.com/file/d/1zDYcwAkNXsku-WXcWy3GKXWlhqe1GB3a/view?usp=sharing
+
+                 this is true kai
+
+
+            9     this is valentina nappi
+
+https://drive.google.com/file/d/12HNJOIj41dAFR63yID_c8FXTFDN8JvDE/view?usp=sharing
+https://drive.google.com/file/d/12ne_Xors051IRe4VxTwtMHg3ni2u0fhn/view?usp=sharing
+https://drive.google.com/file/d/18wb54oddXA9tH3uiFg9CBRQ1_xC4iGVh/view?usp=sharing
+https://drive.google.com/file/d/1CsfSiltvXQ2G_MWSVVf_P4a-qqXT9te-/view?usp=sharing
+https://drive.google.com/file/d/1QSTvT1Galay_m1rcU1WIRNKzoDjydEKn/view?usp=sharing
+https://drive.google.com/file/d/1T2fciadS6_zXsjjiHO9_SOe2R-vibqpz/view?usp=sharing
+https://drive.google.com/file/d/1ZGhIxn9fVeEVKiwfn84CEdpqv1P0vU_6/view?usp=sharing
+https://drive.google.com/file/d/1Zt01tIEsrOqHpD3LmcNTCw73Ia7JB7wi/view?usp=sharing
+https://drive.google.com/file/d/1c7NJK7Qdz_8PGu_a_YhWHo9vslhqEvmP/view?usp=sharing
+https://drive.google.com/file/d/1ewA_tngLfk48it0zASq088TMq4b-8jHh/view?usp=sharing
+https://drive.google.com/file/d/1iw1FSx7g6QJlR3fnG8klHEygp2RHiSzE/view?usp=sharing
+https://drive.google.com/file/d/1yWXf6uo_JiMnQY-V0SbjEdi8PvBb9-iH/view?usp=sharing
+
+                 this is valentina nappi
