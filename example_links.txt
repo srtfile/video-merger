@@ -1,0 +1,53 @@
+# 🎬 Example Google Drive Links for Video Joiner
+# Place one Google Drive link (or direct video URL) per line.
+# Lines starting with '#' are ignored as comments.
+# Supported formats:
+#   - https://drive.google.com/file/d/<FILE_ID>/view?usp=sharing
+#   - https://drive.google.com/open?id=<FILE_ID>
+#   - https://drive.google.com/uc?id=<FILE_ID>&export=download
+#   - Direct raw File IDs
+#
+# ⚙️ GITHUB ACTIONS (.yml) WORKFLOW DISPATCH OPTIONS:
+#   - batch_range: Specify range of batches to process:
+#       * "1 to 3"  -> processes batch 1, batch 2, and batch 3
+#       * "1-3"     -> processes batch 1, batch 2, and batch 3
+#       * "2-4"     -> processes batch 2, batch 3, and batch 4
+#       * "1, 3"    -> processes batch 1 and batch 3
+#       * "all"     -> processes all batches sequentially with cooldown
+#   - batch_target: Specify a single batch number (e.g. 1, 2) or "all"
+#   - batch_delay:  Cooldown delay in seconds between batches (default: 300 / 5 minutes)
+#
+# 💻 LOCAL CLI USAGE:
+#   python video_joiner.py -g example_links.txt --batch-range "1 to 3"
+#   python video_joiner.py -g example_links.txt --batch-range "2-4"
+#   python video_joiner.py -g example_links.txt --batch-index 1
+
+
+
+   
+
+            7     this is natasha nice romi rain nicolate shea
+
+https://drive.google.com/file/d/12g6NXYOjG_gcWxWdqzTv_ewgVbEcKu58/view?usp=sharing
+https://drive.google.com/file/d/16Kz5f11QJtOV3bibBPKzHzBJSEbHLCUI/view?usp=sharing
+https://drive.google.com/file/d/1F9RckM_LqCAx3xTiV0cY9FE9iWYTGNsj/view?usp=sharing
+https://drive.google.com/file/d/1FM2Bmti76lOBkZNSVeYksJ6gHHTOW8-d/view?usp=sharing
+https://drive.google.com/file/d/1L0MsbTMMS1bVQ-232pn01WvyutnUbZti/view?usp=sharing
+https://drive.google.com/file/d/1LCwfWwKbCM3w65iRCMaPOgfkYnbl7Crh/view?usp=sharing
+https://drive.google.com/file/d/1PsMC0IMoSgJu9G3TAW3o5llZxcMbgS9Y/view?usp=sharing
+https://drive.google.com/file/d/1SsFbyM-Srf4MFUxxVr8DYc8sTNXsM61j/view?usp=sharing
+https://drive.google.com/file/d/1ZALHXbPiCZnaCu-UXElOq3oHUvE39UNs/view?usp=sharing
+https://drive.google.com/file/d/1ZxuHRj1cHhpzzVig1hsN-3bHs2MikC1Z/view?usp=sharing
+https://drive.google.com/file/d/1aKOCX1Q083NvHQMEN93qdoDfsecq30Bu/view?usp=sharing
+https://drive.google.com/file/d/1fb8PAP0tO2Nzjd0M3PnybMMatoJGABAY/view?usp=sharing
+https://drive.google.com/file/d/1l4pYeuPZwqA1XgU3Do0T0Tei1jLnh0xY/view?usp=sharing
+https://drive.google.com/file/d/1nKw86E4zujH19JsWeOCTo8Q3caUtlSgz/view?usp=sharing
+https://drive.google.com/file/d/1nOuN8b8_hy2vIxZLvU4SQBKkQybirfJx/view?usp=sharing
+https://drive.google.com/file/d/1qdj_BYWa-trTV0XX8zCO7Ab5itx9f0or/view?usp=sharing
+https://drive.google.com/file/d/1sGs3DX2G7gqLE5mteSBep8HY4VlIf1kB/view?usp=sharing
+https://drive.google.com/file/d/1sV4VnPfON_ZdSDWrMqb3TAy4JahMEzDv/view?usp=sharing
+https://drive.google.com/file/d/1ucrL9Ynycanfs1tOQ4vFPQTt4gsAiMbN/view?usp=sharing
+https://drive.google.com/file/d/1xJezTeaimRM3Qj77mHK7wKrA6c2ACgOJ/view?usp=sharing
+
+                 this is natasha nice romi rain nicolate shea
+
