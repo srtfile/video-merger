@@ -1,0 +1,331 @@
+name: 🎬 Lossless Video Joiner from Google Drive
+
+on:
+  workflow_dispatch:
+    inputs:
+      video_urls:
+        description: 'Google Drive URL(s) or links file (e.g. example_links.txt)'
+        required: true
+        type: string
+        default: 'example_links.txt'
+      batch_range:
+        description: 'Batch range to process: e.g. "1 to 3", "1-3", "2-4", "1, 3", or "all"'
+        required: false
+        type: string
+        default: 'all'
+      batch_target:
+        description: 'Single batch number (e.g. 1, 2, 3) or "all" (used if batch_range is "all")'
+        required: false
+        type: string
+        default: 'all'
+      output_filename:
+        description: 'Default Output Filename (for single merge; grouped batches use clean group names)'
+        required: true
+        type: string
+        default: 'merged_video.mp4'
+      join_mode:
+        description: 'Join Mode: auto (smart lossless copy), copy (force 100% stream copy), transcode (visually lossless)'
+        required: true
+        type: choice
+        default: 'auto'
+        options:
+          - auto
+          - copy
+          - transcode
+      sort_order:
+        description: 'File Sorting Order'
+        required: false
+        type: choice
+        default: 'natural'
+        options:
+          - natural
+          - alphabetical
+          - date
+          - none
+      batch_delay:
+        description: 'Cooldown delay between batches in seconds (default: 300 / 5 mins)'
+        required: false
+        type: number
+        default: 300
+      preset:
+        description: 'Transcode Speed Preset (veryfast avoids 6h timeout; 10x faster with intact visual quality)'
+        required: false
+        type: choice
+        default: 'veryfast'
+        options:
+          - ultrafast
+          - superfast
+          - veryfast
+          - faster
+          - fast
+          - medium
+          - slow
+      max_runtime:
+        description: 'Safety max runtime in minutes before saving checkpoint and auto-continuing (default: 330 mins / 5.5 hours)'
+        required: false
+        type: number
+        default: 330
+      upload_release:
+        description: 'Create a GitHub Release with the merged video for direct public download?'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  prepare-batches:
+    name: 📋 Discover & Plan Video Batches
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      total_batches: ${{ steps.set-matrix.outputs.total_batches }}
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 🔍 Parse Batches & Build Matrix
+        id: set-matrix
+        env:
+          INPUT_URLS: ${{ inputs.video_urls }}
+          OUTPUT_DEFAULT: ${{ inputs.output_filename }}
+          BATCH_RANGE: ${{ inputs.batch_range }}
+          BATCH_TARGET: ${{ inputs.batch_target }}
+        run: |
+          python - << 'EOF'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+          from video_joiner import parse_batch_groups, parse_range_selection
+
+          input_urls = os.environ.get("INPUT_URLS", "").strip()
+          output_default = os.environ.get("OUTPUT_DEFAULT", "merged_video.mp4").strip()
+          batch_range = os.environ.get("BATCH_RANGE", "").strip()
+          batch_target = os.environ.get("BATCH_TARGET", "").strip()
+
+          p = Path(input_urls)
+          if p.is_file():
+              groups = parse_batch_groups(p)
+          else:
+              groups = parse_batch_groups(input_urls)
+
+          matrix_items = []
+          if groups and (len(groups) > 1 or (len(groups) == 1 and groups[0].name != "merged_video")):
+              for g in groups:
+                  matrix_items.append({
+                      "index": g.index,
+                      "name": g.name,
+                      "label": g.raw_label,
+                      "output": f"{g.name}.mp4",
+                      "artifact_name": f"{g.index:02d}-{g.name}",
+                      "urls_count": len(g.urls),
+                      "force_no_delay": False
+                  })
+          else:
+              matrix_items.append({
+                  "index": 1,
+                  "name": Path(output_default).stem or "merged_video",
+                  "label": "Standard Merge",
+                  "output": output_default,
+                  "artifact_name": Path(output_default).stem or "merged_video",
+                  "urls_count": len(groups[0].urls) if groups else 0,
+                  "force_no_delay": True
+              })
+
+          # Determine target selection (range takes precedence over target if specified)
+          target_expr = ""
+          if batch_range and batch_range.lower() != "all":
+              target_expr = batch_range
+          elif batch_target and batch_target.lower() != "all":
+              target_expr = batch_target
+
+          if target_expr:
+              selected_indices = parse_range_selection(target_expr, len(matrix_items))
+              filtered_items = [dict(matrix_items[i - 1]) for i in selected_indices if 1 <= i <= len(matrix_items)]
+              if filtered_items:
+                  filtered_items[0]["force_no_delay"] = True
+                  matrix_items = filtered_items
+                  print(f"🎯 Filtered by range/target '{target_expr}': {len(matrix_items)} batch(es) selected.")
+              else:
+                  print(f"⚠️ Requested range/target '{target_expr}' matched no batches. Running all.")
+
+          matrix_json = json.dumps(matrix_items)
+          print(f"Discovered {len(matrix_items)} batch(es) to run:")
+          for item in matrix_items:
+              print(f"  [{item['index']}] '{item['label']}' -> {item['output']} (Artifact: {item['artifact_name']}, {item['urls_count']} URLs)")
+
+          github_output = os.environ.get("GITHUB_OUTPUT")
+          if github_output:
+              with open(github_output, "a", encoding="utf-8") as f:
+                  f.write(f"matrix={matrix_json}\n")
+                  f.write(f"total_batches={len(matrix_items)}\n")
+          EOF
+
+  merge-batch:
+    name: 🎬 Batch ${{ matrix.batch.index }} - ${{ matrix.batch.name }}
+    needs: prepare-batches
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        batch: ${{ fromJson(needs.prepare-batches.outputs.matrix) }}
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: ⏳ Cooldown Delay (Auto Wait Before Next Video)
+        if: ${{ matrix.batch.index > 1 && !matrix.batch.force_no_delay }}
+        run: |
+          DELAY="${{ inputs.batch_delay || 300 }}"
+          echo "========================================================"
+          echo "⏳ Cooldown active: waiting $DELAY seconds (5 minutes)"
+          echo "   before starting Batch ${{ matrix.batch.index }}: ${{ matrix.batch.name }}"
+          echo "========================================================"
+          sleep "$DELAY"
+
+      - name: 🎬 Setup FFmpeg & FFprobe
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          echo "FFmpeg binary: $(which ffmpeg)"
+          echo "FFprobe binary: $(which ffprobe)"
+          ffmpeg -version | head -n 2
+
+      - name: 🐍 Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 📦 Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 💾 Restore Video Downloads & Normalized Segments Cache
+        uses: actions/cache/restore@v4
+        id: cache-restore
+        with:
+          path: |
+            downloads/
+            .video_cache/
+          key: video-cache-${{ matrix.batch.name }}-${{ github.run_id }}
+          restore-keys: |
+            video-cache-${{ matrix.batch.name }}-
+
+      - name: "🚀 Download & Merge Losslessly (Batch ${{ matrix.batch.index }} - ${{ matrix.batch.name }})"
+        id: merge_step
+        env:
+          INPUT_URLS: ${{ inputs.video_urls }}
+          BATCH_INDEX: ${{ matrix.batch.index }}
+          OUTPUT_TARGET: ${{ matrix.batch.output }}
+          JOIN_MODE: ${{ inputs.join_mode }}
+          SORT_ORDER: ${{ inputs.sort_order }}
+          PRESET: ${{ inputs.preset || 'veryfast' }}
+          MAX_RUNTIME: ${{ inputs.max_runtime || 330 }}
+          CI: 'true'
+        run: |
+          echo "========================================================"
+          echo "🎬 Processing Batch ${{ matrix.batch.index }}: ${{ matrix.batch.name }}"
+          echo "🎯 Target File:   $OUTPUT_TARGET"
+          echo "⚙️ Join Mode:     $JOIN_MODE"
+          echo "🗂️ Sort Order:    $SORT_ORDER"
+          echo "⚡ Transcode Preset: $PRESET (10x fast encoding)"
+          echo "⏱️ Max Runtime:   $MAX_RUNTIME minutes safety limit"
+          echo "========================================================"
+          
+          CACHE_DIR=".video_cache/${{ matrix.batch.name }}"
+          if [ -f "$INPUT_URLS" ]; then
+            python -u video_joiner.py \
+              -g "$INPUT_URLS" \
+              --batch-index "$BATCH_INDEX" \
+              -o "$OUTPUT_TARGET" \
+              -m "$JOIN_MODE" \
+              --sort "$SORT_ORDER" \
+              --preset "$PRESET" \
+              --max-runtime "$MAX_RUNTIME" \
+              --cache-dir "$CACHE_DIR" \
+              -y
+          else
+            python -u video_joiner.py \
+              --urls "$INPUT_URLS" \
+              --batch-index "$BATCH_INDEX" \
+              -o "$OUTPUT_TARGET" \
+              -m "$JOIN_MODE" \
+              --sort "$SORT_ORDER" \
+              --preset "$PRESET" \
+              --max-runtime "$MAX_RUNTIME" \
+              --cache-dir "$CACHE_DIR" \
+              -y
+          fi
+
+      - name: 💾 Save Video Downloads & Segments Checkpoint Cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            downloads/
+            .video_cache/
+          key: video-cache-${{ matrix.batch.name }}-${{ github.run_id }}
+
+      - name: 🔄 Auto-Restart Continuation Run (if time budget reached)
+        if: steps.merge_step.outputs.resumed_needed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "========================================================"
+          echo "🚀 Batch ${{ matrix.batch.index }} reached runtime safety limit (5.5 hours)."
+          echo "   Checkpoint has been saved to cache."
+          echo "   Auto-triggering continuation run for Batch ${{ matrix.batch.index }}..."
+          echo "========================================================"
+          gh workflow run "${{ github.workflow }}" \
+            -f video_urls="${{ inputs.video_urls }}" \
+            -f batch_range="${{ matrix.batch.index }}" \
+            -f output_filename="${{ inputs.output_filename }}" \
+            -f join_mode="${{ inputs.join_mode }}" \
+            -f preset="${{ inputs.preset || 'veryfast' }}" \
+            -f sort_order="${{ inputs.sort_order }}" \
+            -f max_runtime="${{ inputs.max_runtime || 330 }}"
+
+      - name: 📤 Upload Merged Video Artifact (${{ matrix.batch.name }})
+        if: steps.merge_step.outputs.completed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.batch.artifact_name }}-${{ github.run_id }}
+          path: |
+            ${{ matrix.batch.output }}
+            *.mp4
+            !downloads/**
+            !.video_cache/**
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: 🚀 Publish GitHub Release (Optional)
+        if: ${{ inputs.upload_release == true && steps.merge_step.outputs.completed == 'true' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: release-${{ matrix.batch.name }}-${{ github.run_id }}
+          name: ${{ matrix.batch.name }} - Run ${{ github.run_id }}
+          files: |
+            ${{ matrix.batch.output }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ## 🎬 Lossless Video Joiner Output
+            - **Batch Name:** `${{ matrix.batch.name }}`
+            - **Original Group Label:** `${{ matrix.batch.label }}`
+            - **Output File:** `${{ matrix.batch.output }}`
+            - **Workflow Run:** [#${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            - **Join Mode:** `${{ inputs.join_mode }}`
+            - **Transcode Preset:** `${{ inputs.preset || 'veryfast' }}`
