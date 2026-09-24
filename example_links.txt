@@ -49,18 +49,32 @@
 #   python video_joiner.py -g example_links.txt --batch-range "2-4"
 #   python video_joiner.py -g example_links.txt --batch-index 1
 
-                        this is connie carter full 
-https://drive.google.com/file/d/11zmyavzd0Goj44YilFmpDvAAOVV9kAaN/view?usp=sharing
-https://drive.google.com/file/d/15CrmI0fu5wdvfnwE8JXftoMSrV9MRT5Q/view?usp=sharing
-https://drive.google.com/file/d/16UcuDw4ggtebmeD7_svlyXVtvB0z9RmT/view?usp=sharing
-https://drive.google.com/file/d/1EhqwJxguUb_j-RF-M8i_cchNmAIOrFxk/view?usp=sharing
-https://drive.google.com/file/d/1Fi0X5_YbinJmzHUDLp6Qi7tv65q_Wbzo/view?usp=sharing
-https://drive.google.com/file/d/1S3O9oo4i9QA0yL_gWy5YLYYou4irh1Zz/view?usp=sharing
-https://drive.google.com/file/d/1UO6wm4TmxTLn7rKdQU7cIKnJuhU5XBB1/view?usp=sharing
-https://drive.google.com/file/d/1bE2lJa7m0BZDiu7lDqiABPESIYOlhvzw/view?usp=sharing
-https://drive.google.com/file/d/1eiRgP4QznD1jDGrxHrxOXFk20eY1Kl9z/view?usp=sharing
-https://drive.google.com/file/d/1k6P80wk-s5afw2zicbqJnZZdTmyu6Afx/view?usp=sharing
-https://drive.google.com/file/d/1w1QBFnCD-D0H5_EPfhyaYjoW3alTDL__/view?usp=sharing
-https://drive.google.com/file/d/1y5KiVN-IWDaJNPG6U35paVGfGJc3InaW/view?usp=sharing
+                        this is kylie gunner
+https://drive.google.com/file/d/11IdQHsVTSxeSRP7Tu3fvdVE5zO2JaGJa/view?usp=sharing
+https://drive.google.com/file/d/14WmnmrIF77ZCOSA1GUAJwWLY_hzuQDLV/view?usp=sharing
+https://drive.google.com/file/d/15JxEx0lE6UdhTqmr_SM3Ozt2uxo5xfFw/view?usp=sharing
+https://drive.google.com/file/d/16pIdOVEP9ARaUNJAit6Pg2pX73aC7tTu/view?usp=sharing
+https://drive.google.com/file/d/19lvCvNoT1r3Wty5AnmD9bJbqFVoNtVzk/view?usp=sharing
+https://drive.google.com/file/d/1DsJiwY5LBn1N8Tkcq2r3U-344M2EAGz6/view?usp=sharing
+https://drive.google.com/file/d/1DsQJ-H7QQH05A6E3qbEhv5omnvyrpc3u/view?usp=sharing
+https://drive.google.com/file/d/1FXSwSvJ7h4rNC0ernu2-4SMPbXRVXtHK/view?usp=sharing
+https://drive.google.com/file/d/1IDsE4WeyiA0MNF6SOyhNXZ4k-BWiop2e/view?usp=sharing
+https://drive.google.com/file/d/1JbSLRT2CGT1_VVBVIgKEQjm_kxv41n3L/view?usp=sharing
+https://drive.google.com/file/d/1MrQPU5RsIAyebWlf2xLPKeSu7s3E0Ynl/view?usp=sharing
+https://drive.google.com/file/d/1NkPpzUGfrO_4Yqk3405fMNq_xhgFNlIL/view?usp=sharing
+https://drive.google.com/file/d/1PVF-6T_WysYIS68fYQTpOkMlL4goZzkI/view?usp=sharing
+https://drive.google.com/file/d/1RYu1HkAAwHc5xV0s0FRrPNMTqvZJ4kbo/view?usp=sharing
+https://drive.google.com/file/d/1T1zXEFLse2dgleL1BvwB24KH6o4Gh071/view?usp=sharing
+https://drive.google.com/file/d/1Tqw01HoV8dKIKrTEzJND-vrdtnCYn6O0/view?usp=sharing
+https://drive.google.com/file/d/1W5hVooB1Nhh3ZNvEPeY8_8w_IjQ9OesU/view?usp=sharing
+https://drive.google.com/file/d/1c-NuwEA6Wh0ZUEv4-2RROnrOBHQLMUTR/view?usp=sharing
+https://drive.google.com/file/d/1hMEo95oinR-f60MDze1_auGUOh81aSRR/view?usp=sharing
+https://drive.google.com/file/d/1k0T3-KlqEa-OOuvQL8Cv9khds9yXeynR/view?usp=sharing
+https://drive.google.com/file/d/1p8oWjTBxQpSQxy87HeuqoQ3ZeMH6vnx1/view?usp=sharing
+https://drive.google.com/file/d/1u5a6tzBnjlF8lp4EGp5oq4xMK8VvwG0Z/view?usp=sharing
+https://drive.google.com/file/d/1wfIyL3HQ0QK9Xl_8GbAlZc-i-duI7PuX/view?usp=sharing
+https://drive.google.com/file/d/1xJK3JtiMMrCJqGvAitH0isxGLicV82WA/view?usp=sharing
+https://drive.google.com/file/d/1ypkAh8301SPFbd3-bik2PH1tfLOms81G/view?usp=sharing
+https://drive.google.com/file/d/1zq0OwJojwqZISMd3KH59ECgPbJrgR8oI/view?usp=sharing
 
-                 this is connie carter full 
+                 this is kylie gunner
