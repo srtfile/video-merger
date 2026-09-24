@@ -1392,12 +1392,21 @@ def find_cached_video(url_or_id: str, dest_dir: Path, index: int) -> Optional[Pa
 
 WEB_QUALITY_ORDER = ["2160p", "1080p", "720p", "480p", "360p"]
 
+WEB_QUALITY_ORDER = ["2160p", "1080p", "720p", "480p", "360p"]
+
 WEB_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                  "AppleWebKit/537.36 (KHTML, like Gecko) "
-                  "Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.5",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.4kporno.xxx/",
+    "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+    "Sec-Ch-Ua-Mobile": "?0",
+    "Sec-Ch-Ua-Platform": '"Windows"',
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "same-origin",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
 }
 
 
@@ -1421,21 +1430,65 @@ def is_webpage_url(url_or_id: str) -> bool:
     return True
 
 
+def fetch_webpage_html(url: str, referer: Optional[str] = None) -> str:
+    """
+    Fetches HTML content with Cloudflare / 403 bypass.
+    First tries requests with browser headers; if 403 or error occurs,
+    automatically falls back to system curl.
+    """
+    domain = urllib.parse.urlparse(url).netloc
+    ref = referer or f"https://{domain}/"
+
+    req_headers = WEB_HEADERS.copy()
+    req_headers["Referer"] = ref
+
+    # 1. Try requests.Session
+    if requests:
+        try:
+            s = requests.Session()
+            resp = s.get(url, headers=req_headers, timeout=20)
+            if resp.status_code == 200 and resp.text:
+                return resp.text
+        except Exception:
+            pass
+
+    # 2. Resilient fallback to curl (present on all GitHub Actions runners)
+    curl_bin = "curl.exe" if sys.platform == "win32" else "curl"
+    curl_cmd = [
+        curl_bin, "-sSL",
+        "-A", req_headers["User-Agent"],
+        "-H", f"Referer: {ref}",
+        "-H", f"Accept: {req_headers['Accept']}",
+        "-H", f"Accept-Language: {req_headers['Accept-Language']}",
+        "-H", f"Sec-Ch-Ua: {req_headers['Sec-Ch-Ua']}",
+        "-H", f"Sec-Ch-Ua-Platform: {req_headers['Sec-Ch-Ua-Platform']}",
+        "-H", f"Sec-Fetch-Dest: {req_headers['Sec-Fetch-Dest']}",
+        "-H", f"Sec-Fetch-Mode: {req_headers['Sec-Fetch-Mode']}",
+        "-H", f"Sec-Fetch-Site: {req_headers['Sec-Fetch-Site']}",
+        "--compressed",
+        url
+    ]
+    try:
+        res = subprocess.run(curl_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, errors="replace", timeout=30)
+        if res.returncode == 0 and res.stdout and ("<html" in res.stdout.lower() or "<video" in res.stdout.lower() or "mp4" in res.stdout.lower()):
+            return res.stdout
+    except Exception as e:
+        print(f"⚠️ curl fallback note: {e}")
+
+    raise RuntimeError(f"Failed to fetch webpage (Cloudflare/403 block): {url}")
+
+
 def extract_webpage_video_info(page_url: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     """
     Extracts the highest quality direct video URL, quality label, and title from a webpage
     (e.g., 4kporno.xxx, HTML5 video pages with <video><source>).
     Returns: (video_stream_url, quality_label, title)
     """
-    if not requests:
-        raise ImportError("requests is required for scraping video pages.")
-
-    resp = requests.get(page_url, headers=WEB_HEADERS, timeout=25)
-    resp.raise_for_status()
+    html_content = fetch_webpage_html(page_url)
 
     title = None
     if BeautifulSoup:
-        soup = BeautifulSoup(resp.text, "html.parser")
+        soup = BeautifulSoup(html_content, "html.parser")
         h1 = soup.find("h1")
         if h1 and h1.get_text(strip=True):
             title = h1.get_text(strip=True)
@@ -1478,7 +1531,7 @@ def extract_webpage_video_info(page_url: str) -> Tuple[Optional[str], Optional[s
             return sources[first_q], first_q, title
 
     # Fallback regex search for video source URLs
-    mp4_matches = re.findall(r'(https?://[^"\'\s>]+\.(?:mp4|m4v|ts|webm)(?:/[^"\'\s>]*)?)', resp.text, re.IGNORECASE)
+    mp4_matches = re.findall(r'(https?://[^"\'\s>]+\.(?:mp4|m4v|ts|webm)(?:/[^"\'\s>]*)?)', html_content, re.IGNORECASE)
     if mp4_matches:
         for q in WEB_QUALITY_ORDER:
             for m in mp4_matches:
@@ -1487,6 +1540,72 @@ def extract_webpage_video_info(page_url: str) -> Tuple[Optional[str], Optional[s
         return mp4_matches[0], "default", title
 
     return None, None, title
+
+
+def download_stream_file(
+    stream_url: str,
+    target_path: Path,
+    referer: str,
+    index: int = 1
+) -> None:
+    """Download video stream with dual engine: requests with fallback to curl."""
+    temp_path = target_path.with_name(target_path.name + ".part")
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "*/*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": referer,
+        "Sec-Fetch-Dest": "video",
+        "Sec-Fetch-Mode": "no-cors",
+        "Sec-Fetch-Site": "cross-site",
+    }
+
+    download_ok = False
+    if requests:
+        try:
+            with requests.get(stream_url, headers=headers, stream=True, timeout=30) as resp:
+                if resp.status_code == 200:
+                    total_size = int(resp.headers.get("content-length", 0))
+                    downloaded = 0
+                    chunk_size = 1024 * 1024
+                    with open(temp_path, "wb") as f:
+                        for chunk in resp.iter_content(chunk_size=chunk_size):
+                            if chunk:
+                                f.write(chunk)
+                                downloaded += len(chunk)
+                                if total_size:
+                                    pct = (downloaded / total_size) * 100
+                                    print(f"\r  [{index:02d}] {downloaded / (1024*1024):.1f}MB / {total_size / (1024*1024):.1f}MB ({pct:.1f}%)", end="", flush=True)
+                    print()
+                    if temp_path.is_file() and temp_path.stat().st_size > 1024:
+                        download_ok = True
+        except Exception:
+            download_ok = False
+
+    # Fallback to curl
+    if not download_ok:
+        curl_bin = "curl.exe" if sys.platform == "win32" else "curl"
+        curl_cmd = [
+            curl_bin, "-L",
+            "-A", headers["User-Agent"],
+            "-H", f"Referer: {referer}",
+            "-o", str(temp_path),
+            "--retry", "3",
+            "--retry-delay", "2",
+            stream_url
+        ]
+        res = subprocess.run(curl_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if res.returncode == 0 and temp_path.is_file() and temp_path.stat().st_size > 1024:
+            download_ok = True
+
+    if not download_ok or not temp_path.is_file() or temp_path.stat().st_size == 0:
+        if temp_path.exists():
+            temp_path.unlink()
+        raise RuntimeError(f"Failed to download video stream from: {stream_url}")
+
+    if target_path.exists():
+        target_path.unlink()
+    temp_path.rename(target_path)
 
 
 def download_webpage_video(page_url: str, dest_dir: Path, index: int = 1) -> Path:
@@ -1509,14 +1628,11 @@ def download_webpage_video(page_url: str, dest_dir: Path, index: int = 1) -> Pat
             filename += ".mp4"
 
     dest_path = dest_dir / filename
-    temp_path = dest_dir / f"{filename}.part"
 
-    headers = WEB_HEADERS.copy()
-    headers["Referer"] = page_url
-
+    # Cache check
     if dest_path.is_file() and dest_path.stat().st_size > 1024:
         try:
-            head_resp = requests.head(stream_url, headers=headers, timeout=10)
+            head_resp = requests.head(stream_url, headers={"Referer": page_url, "User-Agent": WEB_HEADERS["User-Agent"]}, timeout=10)
             remote_sz = int(head_resp.headers.get("content-length", 0))
             if remote_sz and dest_path.stat().st_size == remote_sz:
                 print(f"⏩ [Cache Hit] '{dest_path.name}' ({format_size(remote_sz)}) already downloaded.")
@@ -1525,32 +1641,9 @@ def download_webpage_video(page_url: str, dest_dir: Path, index: int = 1) -> Pat
             pass
 
     print(f"📥 Downloading: {dest_path.name} (Quality: {quality.upper() if quality else 'Auto'})")
-    with requests.get(stream_url, headers=headers, stream=True, timeout=30) as resp:
-        resp.raise_for_status()
-        total_size = int(resp.headers.get("content-length", 0))
-
-        downloaded = 0
-        chunk_size = 1024 * 1024  # 1MB
-        with open(temp_path, "wb") as f:
-            for chunk in resp.iter_content(chunk_size=chunk_size):
-                if chunk:
-                    f.write(chunk)
-                    downloaded += len(chunk)
-                    if total_size:
-                        pct = (downloaded / total_size) * 100
-                        print(
-                            f"\r  [{index:02d}] {downloaded / (1024*1024):.1f}MB / {total_size / (1024*1024):.1f}MB ({pct:.1f}%)",
-                            end="",
-                            flush=True,
-                        )
-        print()
-
-    if temp_path.exists():
-        if dest_path.exists():
-            dest_path.unlink()
-        temp_path.rename(dest_path)
-
+    download_stream_file(stream_url, dest_path, referer=page_url, index=index)
     return dest_path
+
 
 
 def download_video(url_or_id: str, dest_dir: Path, index: int = 1) -> Path:
