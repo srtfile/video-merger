@@ -18,7 +18,7 @@ from core.sorter import SUPPORTED_EXTENSIONS, is_html_or_empty_file
 from core.ffmpeg_utils import find_binary
 from core.probe import probe_file, extract_ffmpeg_error, is_ts_file
 
-# Try importing requests and gdown
+# Try importing requests, bs4, tqdm, and gdown
 try:
     import requests
 except ImportError:
@@ -28,6 +28,16 @@ try:
     import gdown
 except ImportError:
     gdown = None
+
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    BeautifulSoup = None
+
+try:
+    from tqdm import tqdm
+except ImportError:
+    tqdm = None
 
 
 def extract_gdrive_id(url: str) -> Optional[str]:
@@ -868,6 +878,170 @@ def download_with_requests(
     return ensure_video_extension(dest_path)
 
 
+WEB_QUALITY_ORDER = ["2160p", "1080p", "720p", "480p", "360p"]
+
+WEB_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                  "AppleWebKit/537.36 (KHTML, like Gecko) "
+                  "Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+}
+
+
+def sanitize_filename(name: str) -> str:
+    """Removes invalid filename characters for Windows/Linux."""
+    clean = re.sub(r'[\\/*?:"<>|]', "_", name)
+    clean = re.sub(r"\s+", " ", clean).strip()
+    return clean
+
+
+def is_webpage_url(url_or_id: str) -> bool:
+    """Check if the string is an HTTP/HTTPS webpage URL rather than a Google Drive link or direct video file."""
+    if not (url_or_id.startswith("http://") or url_or_id.startswith("https://")):
+        return False
+    if extract_gdrive_id(url_or_id):
+        return False
+    clean = url_or_id.split("?")[0].rstrip("/")
+    ext = os.path.splitext(clean)[1].lower()
+    if ext in SUPPORTED_EXTENSIONS:
+        return False
+    return True
+
+
+def extract_webpage_video_info(page_url: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """
+    Extracts the highest quality direct video URL, quality label, and title from a webpage
+    (e.g., 4kporno.xxx, HTML5 video pages with <video><source>).
+    Returns: (video_stream_url, quality_label, title)
+    """
+    if not requests:
+        raise ImportError("requests is required for scraping video pages.")
+
+    resp = requests.get(page_url, headers=WEB_HEADERS, timeout=25)
+    resp.raise_for_status()
+
+    title = None
+    if BeautifulSoup:
+        soup = BeautifulSoup(resp.text, "html.parser")
+        h1 = soup.find("h1")
+        if h1 and h1.get_text(strip=True):
+            title = h1.get_text(strip=True)
+        elif soup.title and soup.title.string:
+            title = soup.title.string.strip()
+
+        video = soup.find("video", id=lambda x: x and "html5_api" in x)
+        if not video:
+            video = soup.find("video")
+
+        sources: Dict[str, str] = {}
+        if video:
+            for source in video.find_all("source"):
+                src = source.get("src")
+                label = source.get("label", "").strip().lower()
+                if src:
+                    if "2160" in label or "4k" in label:
+                        norm_label = "2160p"
+                    elif "1080" in label:
+                        norm_label = "1080p"
+                    elif "720" in label:
+                        norm_label = "720p"
+                    elif "480" in label:
+                        norm_label = "480p"
+                    elif "360" in label:
+                        norm_label = "360p"
+                    else:
+                        norm_label = label or "default"
+                    sources[norm_label] = urllib.parse.urljoin(page_url, src)
+
+            if video.get("src"):
+                sources["current"] = urllib.parse.urljoin(page_url, video["src"])
+
+        for q in WEB_QUALITY_ORDER:
+            if q in sources:
+                return sources[q], q, title
+
+        if sources:
+            first_q = next(iter(sources.keys()))
+            return sources[first_q], first_q, title
+
+    # Fallback regex search for video source URLs
+    mp4_matches = re.findall(r'(https?://[^"\'\s>]+\.(?:mp4|m4v|ts|webm)(?:/[^"\'\s>]*)?)', resp.text, re.IGNORECASE)
+    if mp4_matches:
+        for q in WEB_QUALITY_ORDER:
+            for m in mp4_matches:
+                if q in m.lower():
+                    return m, q, title
+        return mp4_matches[0], "default", title
+
+    return None, None, title
+
+
+def download_webpage_video(
+    page_url: str,
+    dest_dir: Path,
+    index: int = 1,
+    progress_callback: Optional[Callable[[int, int, str], None]] = None
+) -> Path:
+    """
+    Scrapes video page, resolves best stream URL, and downloads with progress and referer.
+    """
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    stream_url, quality, title = extract_webpage_video_info(page_url)
+    if not stream_url:
+        raise ValueError(f"Could not locate playable video stream from: {page_url}")
+
+    if title:
+        safe = sanitize_filename(title)
+        filename = f"{index:02d}_{safe}.mp4"
+    else:
+        raw_path = urllib.parse.urlparse(stream_url).path.rstrip("/")
+        stem = os.path.basename(raw_path) or f"video_{index:02d}.mp4"
+        filename = f"{index:02d}_{stem}" if not stem.startswith(f"{index:02d}_") else stem
+        if not filename.endswith(".mp4"):
+            filename += ".mp4"
+
+    dest_path = dest_dir / filename
+    temp_path = dest_dir / f"{filename}.part"
+
+    headers = WEB_HEADERS.copy()
+    headers["Referer"] = page_url
+
+    if dest_path.is_file() and dest_path.stat().st_size > 1024:
+        try:
+            head_resp = requests.head(stream_url, headers=headers, timeout=10)
+            remote_sz = int(head_resp.headers.get("content-length", 0))
+            if remote_sz and dest_path.stat().st_size == remote_sz:
+                print(f"⏩ [Cache Hit] '{dest_path.name}' ({format_size(remote_sz)}) already downloaded.")
+                if progress_callback:
+                    progress_callback(remote_sz, remote_sz, dest_path.name)
+                return dest_path
+        except Exception:
+            pass
+
+    print(f"📥 Downloading: {dest_path.name} (Quality: {quality.upper() if quality else 'Auto'})")
+    with requests.get(stream_url, headers=headers, stream=True, timeout=30) as resp:
+        resp.raise_for_status()
+        total_size = int(resp.headers.get("content-length", 0))
+
+        downloaded = 0
+        chunk_size = 1024 * 1024  # 1MB
+        with open(temp_path, "wb") as f:
+            for chunk in resp.iter_content(chunk_size=chunk_size):
+                if chunk:
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if progress_callback:
+                        progress_callback(downloaded, total_size, dest_path.name)
+
+    if temp_path.exists():
+        if dest_path.exists():
+            dest_path.unlink()
+        temp_path.rename(dest_path)
+
+    return dest_path
+
+
 def download_video(
     url_or_id: str,
     dest_dir: Path,
@@ -875,14 +1049,21 @@ def download_video(
     progress_callback: Optional[Callable[[int, int, str], None]] = None
 ) -> Path:
     """
-    Download video from Google Drive or direct URL into dest_dir.
-    Uses gdown first if available, falls back to requests.
+    Download video from Webpage (4KPorno/HTML5), Google Drive, or direct URL into dest_dir.
     """
     dest_dir.mkdir(parents=True, exist_ok=True)
+
+    # 1. Webpage URL
+    if is_webpage_url(url_or_id):
+        res_path = download_webpage_video(url_or_id, dest_dir=dest_dir, index=index, progress_callback=progress_callback)
+        if res_path and res_path.is_file() and is_ts_file(res_path):
+            res_path = convert_ts_to_mp4(res_path)
+        return res_path
+
     file_id = extract_gdrive_id(url_or_id)
     last_err: Optional[Exception] = None
     
-    # If gdown is available and we have a Google Drive ID, try gdown
+    # 2. Google Drive via gdown
     if gdown and file_id:
         try:
             res_path = download_with_gdown(url_or_id, dest_dir=dest_dir, index=index, quiet=False)
@@ -897,7 +1078,7 @@ def download_video(
             last_err = e
             print(f"⚠️ gdown attempt note: {e}, falling back to requests session...")
             
-    # Fallback to requests session
+    # 3. Fallback direct requests
     try:
         res_path = download_with_requests(
             url_or_id=url_or_id,
@@ -914,6 +1095,7 @@ def download_video(
         res_path = convert_ts_to_mp4(res_path)
 
     return res_path
+
 
 
 def download_all_videos(
