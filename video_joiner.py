@@ -1393,19 +1393,6 @@ def find_cached_video(url_or_id: str, dest_dir: Path, index: int) -> Optional[Pa
 
 WEB_QUALITY_ORDER = ["2160p", "1080p", "720p", "480p", "360p"]
 
-PROXIES = [
-    "http://glsbcfvl:336gxb0or4n9@31.59.20.176:6754",
-    "http://glsbcfvl:336gxb0or4n9@45.38.107.97:6014",
-    "http://glsbcfvl:336gxb0or4n9@64.137.96.74:6641",
-    "http://glsbcfvl:336gxb0or4n9@198.23.243.226:6361",
-    "http://glsbcfvl:336gxb0or4n9@38.154.185.97:6370",
-    "http://glsbcfvl:336gxb0or4n9@84.247.60.125:6095",
-    "http://glsbcfvl:336gxb0or4n9@142.111.67.146:5611",
-    "http://glsbcfvl:336gxb0or4n9@191.96.254.138:6185",
-    "http://glsbcfvl:336gxb0or4n9@31.58.9.4:6077",
-    "http://glsbcfvl:336gxb0or4n9@198.46.161.42:5092",
-]
-
 WEB_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
@@ -1429,70 +1416,6 @@ def sanitize_filename(name: str) -> str:
     return clean
 
 
-def get_proxy_dict(proxy_url: Optional[str]) -> Optional[Dict[str, str]]:
-    if not proxy_url:
-        return None
-    return {
-        "http": proxy_url,
-        "https": proxy_url,
-    }
-
-
-def request_with_retry(
-    url: str,
-    method: str = "GET",
-    headers: Optional[Dict[str, str]] = None,
-    stream: bool = False,
-    timeout: int = 30,
-    max_retries: int = 5,
-):
-    """
-    Attempts to fetch a request with automatic proxy rotation upon failure.
-    """
-    req_headers = headers or WEB_HEADERS
-    shuffled_proxies = list(PROXIES)
-    random.shuffle(shuffled_proxies)
-
-    pool = shuffled_proxies[:max_retries]
-    last_exc = None
-
-    if requests:
-        for attempt, proxy in enumerate(pool, start=1):
-            proxies_dict = get_proxy_dict(proxy)
-            try:
-                proxy_display = proxy.split("@")[-1] if "@" in proxy else proxy
-                resp = requests.request(
-                    method=method,
-                    url=url,
-                    headers=req_headers,
-                    proxies=proxies_dict,
-                    stream=stream,
-                    timeout=timeout,
-                )
-                if resp.status_code in [403, 429, 502, 503, 504]:
-                    continue
-                resp.raise_for_status()
-                return resp, proxy
-            except Exception as e:
-                last_exc = e
-
-        # Fallback attempt: direct connection without proxy
-        try:
-            resp = requests.request(
-                method=method,
-                url=url,
-                headers=req_headers,
-                stream=stream,
-                timeout=timeout,
-            )
-            resp.raise_for_status()
-            return resp, None
-        except Exception as e:
-            last_exc = e
-
-    raise RuntimeError(f"All proxy attempts failed for {url}. Last error: {last_exc}")
-
-
 def is_webpage_url(url_or_id: str) -> bool:
     """Check if the string is an HTTP/HTTPS webpage URL rather than a Google Drive link or direct video file."""
     if not (url_or_id.startswith("http://") or url_or_id.startswith("https://")):
@@ -1508,7 +1431,7 @@ def is_webpage_url(url_or_id: str) -> bool:
 
 def fetch_webpage_html(url: str, referer: Optional[str] = None) -> str:
     """
-    Fetches HTML content with Cloudflare / 403 bypass and proxy rotation.
+    Fetches HTML content via Cloudflare WARP / Direct with curl fallback.
     """
     domain = urllib.parse.urlparse(url).netloc
     ref = referer or f"https://{domain}/"
@@ -1516,44 +1439,18 @@ def fetch_webpage_html(url: str, referer: Optional[str] = None) -> str:
     req_headers = WEB_HEADERS.copy()
     req_headers["Referer"] = ref
 
-    # 1. Try requests with rotating proxy pool
+    # 1. Try requests.Session
     if requests:
         try:
-            resp, _ = request_with_retry(url, method="GET", headers=req_headers, timeout=25)
+            s = requests.Session()
+            resp = s.get(url, headers=req_headers, timeout=25)
             if resp.status_code == 200 and resp.text:
                 return resp.text
         except Exception as e:
-            print(f"⚠️ Proxy request fallback note: {e}")
+            print(f"⚠️ requests fetch note: {e}")
 
-    # 2. Resilient fallback to curl with proxies
+    # 2. Resilient fallback to curl
     curl_bin = "curl.exe" if sys.platform == "win32" else "curl"
-    shuffled_proxies = list(PROXIES)
-    random.shuffle(shuffled_proxies)
-
-    for proxy in shuffled_proxies[:3]:
-        curl_cmd = [
-            curl_bin, "-sSL",
-            "--proxy", proxy,
-            "-A", req_headers["User-Agent"],
-            "-H", f"Referer: {ref}",
-            "-H", f"Accept: {req_headers['Accept']}",
-            "-H", f"Accept-Language: {req_headers['Accept-Language']}",
-            "-H", f"Sec-Ch-Ua: {req_headers['Sec-Ch-Ua']}",
-            "-H", f"Sec-Ch-Ua-Platform: {req_headers['Sec-Ch-Ua-Platform']}",
-            "-H", f"Sec-Fetch-Dest: {req_headers['Sec-Fetch-Dest']}",
-            "-H", f"Sec-Fetch-Mode: {req_headers['Sec-Fetch-Mode']}",
-            "-H", f"Sec-Fetch-Site: {req_headers['Sec-Fetch-Site']}",
-            "--compressed",
-            url
-        ]
-        try:
-            res = subprocess.run(curl_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, errors="replace", timeout=30)
-            if res.returncode == 0 and res.stdout and ("<html" in res.stdout.lower() or "<video" in res.stdout.lower() or "mp4" in res.stdout.lower()):
-                return res.stdout
-        except Exception:
-            pass
-
-    # Direct curl attempt
     curl_cmd = [
         curl_bin, "-sSL",
         "-A", req_headers["User-Agent"],
@@ -1575,13 +1472,12 @@ def fetch_webpage_html(url: str, referer: Optional[str] = None) -> str:
     except Exception as e:
         print(f"⚠️ curl fallback note: {e}")
 
-    raise RuntimeError(f"Failed to fetch webpage (Cloudflare/403 block): {url}")
+    raise RuntimeError(f"Failed to fetch webpage: {url}")
 
 
 def extract_webpage_video_info(page_url: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     """
-    Extracts the highest quality direct video URL, quality label, and title from a webpage
-    (e.g., 4kporno.xxx, HTML5 video pages with <video><source>).
+    Extracts the highest quality direct video URL, quality label, and title from a webpage.
     Returns: (video_stream_url, quality_label, title)
     """
     html_content = fetch_webpage_html(page_url)
@@ -1648,7 +1544,7 @@ def download_stream_file(
     referer: str,
     index: int = 1
 ) -> None:
-    """Download video stream with dual engine: requests with rotating proxies and fallback to curl."""
+    """Download video stream with dual engine: requests with fallback to curl."""
     temp_path = target_path.with_name(target_path.name + ".part")
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -1663,48 +1559,27 @@ def download_stream_file(
     download_ok = False
     if requests:
         try:
-            resp, _ = request_with_retry(stream_url, method="GET", headers=headers, stream=True, timeout=60)
-            total_size = int(resp.headers.get("content-length", 0))
-            downloaded = 0
-            chunk_size = 1024 * 1024
-            with open(temp_path, "wb") as f:
-                for chunk in resp.iter_content(chunk_size=chunk_size):
-                    if chunk:
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        if total_size:
-                            pct = (downloaded / total_size) * 100
-                            print(f"\r  [{index:02d}] {downloaded / (1024*1024):.1f}MB / {total_size / (1024*1024):.1f}MB ({pct:.1f}%)", end="", flush=True)
-            print()
-            if temp_path.is_file() and temp_path.stat().st_size > 1024:
-                download_ok = True
+            with requests.get(stream_url, headers=headers, stream=True, timeout=60) as resp:
+                if resp.status_code == 200:
+                    total_size = int(resp.headers.get("content-length", 0))
+                    downloaded = 0
+                    chunk_size = 1024 * 1024
+                    with open(temp_path, "wb") as f:
+                        for chunk in resp.iter_content(chunk_size=chunk_size):
+                            if chunk:
+                                f.write(chunk)
+                                downloaded += len(chunk)
+                                if total_size:
+                                    pct = (downloaded / total_size) * 100
+                                    print(f"\r  [{index:02d}] {downloaded / (1024*1024):.1f}MB / {total_size / (1024*1024):.1f}MB ({pct:.1f}%)", end="", flush=True)
+                    print()
+                    if temp_path.is_file() and temp_path.stat().st_size > 1024:
+                        download_ok = True
         except Exception as e:
-            print(f"⚠️ requests download failed ({e}), trying curl fallback...")
+            print(f"⚠️ requests download note: {e}")
             download_ok = False
 
-    # Fallback to curl with proxies
-    if not download_ok:
-        curl_bin = "curl.exe" if sys.platform == "win32" else "curl"
-        shuffled_proxies = list(PROXIES)
-        random.shuffle(shuffled_proxies)
-
-        for proxy in shuffled_proxies[:3]:
-            curl_cmd = [
-                curl_bin, "-L",
-                "--proxy", proxy,
-                "-A", headers["User-Agent"],
-                "-H", f"Referer: {referer}",
-                "-o", str(temp_path),
-                "--retry", "3",
-                "--retry-delay", "2",
-                stream_url
-            ]
-            res = subprocess.run(curl_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            if res.returncode == 0 and temp_path.is_file() and temp_path.stat().st_size > 1024:
-                download_ok = True
-                break
-
-    # Fallback to direct curl
+    # Fallback to curl
     if not download_ok:
         curl_bin = "curl.exe" if sys.platform == "win32" else "curl"
         curl_cmd = [
