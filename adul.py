@@ -2,7 +2,7 @@
 import os
 import re
 import sys
-import random
+import time
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
@@ -26,20 +26,6 @@ URLS = [
     "https://www.4kporno.xxx/videos/93648628/triple-ds-on-the-couch/",
 ]
 
-# Proxies configured for bypassing IP blocks / geo-restrictions
-PROXIES = [
-    "http://glsbcfvl:336gxb0or4n9@31.59.20.176:6754",
-    "http://glsbcfvl:336gxb0or4n9@45.38.107.97:6014",
-    "http://glsbcfvl:336gxb0or4n9@64.137.96.74:6641",
-    "http://glsbcfvl:336gxb0or4n9@198.23.243.226:6361",
-    "http://glsbcfvl:336gxb0or4n9@38.154.185.97:6370",
-    "http://glsbcfvl:336gxb0or4n9@84.247.60.125:6095",
-    "http://glsbcfvl:336gxb0or4n9@142.111.67.146:5611",
-    "http://glsbcfvl:336gxb0or4n9@191.96.254.138:6185",
-    "http://glsbcfvl:336gxb0or4n9@31.58.9.4:6077",
-    "http://glsbcfvl:336gxb0or4n9@198.46.161.42:5092",
-]
-
 # Preferred quality order (highest first)
 QUALITY_ORDER = ["2160p", "1080p", "720p", "480p", "360p"]
 
@@ -50,7 +36,7 @@ HEADERS = {
                   "AppleWebKit/537.36 (KHTML, like Gecko) "
                   "Chrome/124.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.5",
+    "Accept-Language": "en-US,en;q=0.9",
     "Referer": "https://www.4kporno.xxx/",
 }
 
@@ -62,76 +48,37 @@ def sanitize_filename(name: str) -> str:
     return clean
 
 
-def get_proxy_dict(proxy_url: str | None) -> dict | None:
-    if not proxy_url:
-        return None
-    return {
-        "http": proxy_url,
-        "https": proxy_url,
-    }
-
-
 def request_with_retry(
     url: str,
     method: str = "GET",
     headers: dict = None,
     stream: bool = False,
     timeout: int = 30,
-    max_retries: int = 5,
+    max_retries: int = 3,
 ):
     """
-    Attempts to fetch a request with automatic proxy rotation upon failure.
+    Attempts to fetch a request with retry support through Cloudflare WARP / Direct.
     """
     req_headers = headers or HEADERS
-    shuffled_proxies = list(PROXIES)
-    random.shuffle(shuffled_proxies)
-
-    # Try direct connection last as a fallback or proxy pool first
-    pool = shuffled_proxies[:max_retries]
-
     last_exc = None
-    for attempt, proxy in enumerate(pool, start=1):
-        proxies_dict = get_proxy_dict(proxy)
-        try:
-            # Mask credentials in proxy log
-            proxy_display = proxy.split("@")[-1] if "@" in proxy else proxy
-            print(f"[Proxy #{attempt}] Using {proxy_display} for {url[:60]}...")
 
+    for attempt in range(1, max_retries + 1):
+        try:
             resp = requests.request(
                 method=method,
                 url=url,
                 headers=req_headers,
-                proxies=proxies_dict,
                 stream=stream,
                 timeout=timeout,
             )
-            if resp.status_code in [403, 429, 502, 503, 504]:
-                print(f"[Proxy #{attempt}] HTTP {resp.status_code} received. Switching proxy...")
-                continue
-
             resp.raise_for_status()
-            return resp, proxy
-
+            return resp
         except Exception as e:
-            print(f"[Proxy #{attempt}] Request failed: {e}. Switching proxy...")
             last_exc = e
+            if attempt < max_retries:
+                time.sleep(2 * attempt)
 
-    # Fallback attempt: direct connection without proxy
-    try:
-        print("[Direct Connection] Attempting without proxy...")
-        resp = requests.request(
-            method=method,
-            url=url,
-            headers=req_headers,
-            stream=stream,
-            timeout=timeout,
-        )
-        resp.raise_for_status()
-        return resp, None
-    except Exception as e:
-        last_exc = e
-
-    raise RuntimeError(f"All proxy attempts failed for {url}. Last error: {last_exc}")
+    raise RuntimeError(f"Request failed for {url} after {max_retries} attempts. Last error: {last_exc}")
 
 
 def get_video_info(page_url: str) -> tuple[str | None, str | None, str | None]:
@@ -139,7 +86,7 @@ def get_video_info(page_url: str) -> tuple[str | None, str | None, str | None]:
     Extracts the best quality video URL, selected resolution label, and the video title.
     Returns: (video_url, quality_label, title)
     """
-    resp, _ = request_with_retry(page_url, method="GET", timeout=25)
+    resp = request_with_retry(page_url, method="GET", timeout=25)
     soup = BeautifulSoup(resp.text, "html.parser")
 
     # Extract title
@@ -194,7 +141,7 @@ def get_video_info(page_url: str) -> tuple[str | None, str | None, str | None]:
 
 
 def download_video(video_url: str, output_path: str, referer: str = None) -> bool:
-    """Downloads a video stream to a local file with progress tracking and proxy support."""
+    """Downloads a video stream to a local file with progress tracking."""
     download_headers = HEADERS.copy()
     if referer:
         download_headers["Referer"] = referer
@@ -207,7 +154,7 @@ def download_video(video_url: str, output_path: str, referer: str = None) -> boo
     # Check if file already exists and has size
     if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
         try:
-            head_resp, _ = request_with_retry(
+            head_resp = request_with_retry(
                 video_url, method="HEAD", headers=download_headers, timeout=15
             )
             remote_size = int(head_resp.headers.get("content-length", 0))
@@ -221,7 +168,7 @@ def download_video(video_url: str, output_path: str, referer: str = None) -> boo
     temp_path = output_path + ".part"
 
     try:
-        resp, _ = request_with_retry(
+        resp = request_with_retry(
             video_url, method="GET", headers=download_headers, stream=True, timeout=60
         )
         total_size = int(resp.headers.get("content-length", 0))
