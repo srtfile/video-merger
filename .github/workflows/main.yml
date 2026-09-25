@@ -201,13 +201,22 @@ jobs:
           echo "FFprobe binary: $(which ffprobe)"
           ffmpeg -version | head -n 2
 
-      - name: 🌐 Connect to Cloudflare WARP VPN
-        uses: bxb100/warp-action@v1
-
-      - name: 🔍 Verify Cloudflare WARP Connection
+      - name: 🌐 Setup & Connect Cloudflare WARP VPN
         run: |
-          echo "Public Egress IP & WARP status:"
-          curl -s https://cloudflare.com/cdn-cgi/trace | grep -E "(ip|warp)" || curl -s https://ifconfig.me || true
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends curl gpg lsb-release
+          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends cloudflare-warp
+          sudo warp-cli --accept-tos registration new 2>/dev/null || sudo warp-cli --accept-tos register 2>/dev/null || true
+          sudo warp-cli --accept-tos mode warp 2>/dev/null || sudo warp-cli --accept-tos set-mode warp 2>/dev/null || true
+          sudo warp-cli --accept-tos connect 2>/dev/null || true
+          sleep 4
+          echo "========================================================"
+          echo "🌐 Cloudflare WARP Status & Egress IP:"
+          curl -s https://cloudflare.com/cdn-cgi/trace | head -n 6 || curl -s https://ifconfig.me || true
+          echo "========================================================"
 
       - name: 🐍 Setup Python 3.11
         uses: actions/setup-python@v5
