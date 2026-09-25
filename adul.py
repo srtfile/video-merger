@@ -1,0 +1,319 @@
+#!/usr/bin/env python3
+import os
+import re
+import sys
+import random
+import requests
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin, urlparse
+
+try:
+    from tqdm import tqdm
+except ImportError:
+    tqdm = None
+
+# List of video page URLs to download
+URLS = [
+    "https://www.4kporno.xxx/videos/93722578/newsensations-dirty-little-cheerleader-stories-alyx-stars-big-tits-are-the-game-winner/",
+    "https://www.4kporno.xxx/videos/93753312/blind-date-episode-42-alyx-and-nathan/",
+    "https://www.4kporno.xxx/videos/93687126/beauty-salon-boner-bonanza/",
+    "https://www.4kporno.xxx/videos/93690566/nurse-gets-scrubbed-and-fucked/",
+    "https://www.4kporno.xxx/videos/93726472/amazing-tits-13-scene-1/",
+    "https://www.4kporno.xxx/videos/93744486/big-tit-brunette-alyx-star-fucks-her-boss-to-get-that-promotion/",
+    "https://www.4kporno.xxx/videos/93647040/test-them-out/",
+    "https://www.4kporno.xxx/videos/93413288/alyx-star-in-mean-package-delivery/",
+    "https://www.4kporno.xxx/videos/93702618/fucking-around-the-christmas-tree/",
+    "https://www.4kporno.xxx/videos/93648628/triple-ds-on-the-couch/",
+]
+
+# Proxies configured for bypassing IP blocks / geo-restrictions
+PROXIES = [
+    "http://glsbcfvl:336gxb0or4n9@31.59.20.176:6754",
+    "http://glsbcfvl:336gxb0or4n9@45.38.107.97:6014",
+    "http://glsbcfvl:336gxb0or4n9@64.137.96.74:6641",
+    "http://glsbcfvl:336gxb0or4n9@198.23.243.226:6361",
+    "http://glsbcfvl:336gxb0or4n9@38.154.185.97:6370",
+    "http://glsbcfvl:336gxb0or4n9@84.247.60.125:6095",
+    "http://glsbcfvl:336gxb0or4n9@142.111.67.146:5611",
+    "http://glsbcfvl:336gxb0or4n9@191.96.254.138:6185",
+    "http://glsbcfvl:336gxb0or4n9@31.58.9.4:6077",
+    "http://glsbcfvl:336gxb0or4n9@198.46.161.42:5092",
+]
+
+# Preferred quality order (highest first)
+QUALITY_ORDER = ["2160p", "1080p", "720p", "480p", "360p"]
+
+DOWNLOAD_DIR = os.environ.get("DOWNLOAD_DIR", "downloads")
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                  "AppleWebKit/537.36 (KHTML, like Gecko) "
+                  "Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+    "Referer": "https://www.4kporno.xxx/",
+}
+
+
+def sanitize_filename(name: str) -> str:
+    """Removes invalid filename characters for Windows/Linux."""
+    clean = re.sub(r'[\\/*?:"<>|]', "_", name)
+    clean = re.sub(r"\s+", " ", clean).strip()
+    return clean
+
+
+def get_proxy_dict(proxy_url: str | None) -> dict | None:
+    if not proxy_url:
+        return None
+    return {
+        "http": proxy_url,
+        "https": proxy_url,
+    }
+
+
+def request_with_retry(
+    url: str,
+    method: str = "GET",
+    headers: dict = None,
+    stream: bool = False,
+    timeout: int = 30,
+    max_retries: int = 5,
+):
+    """
+    Attempts to fetch a request with automatic proxy rotation upon failure.
+    """
+    req_headers = headers or HEADERS
+    shuffled_proxies = list(PROXIES)
+    random.shuffle(shuffled_proxies)
+
+    # Try direct connection last as a fallback or proxy pool first
+    pool = shuffled_proxies[:max_retries]
+
+    last_exc = None
+    for attempt, proxy in enumerate(pool, start=1):
+        proxies_dict = get_proxy_dict(proxy)
+        try:
+            # Mask credentials in proxy log
+            proxy_display = proxy.split("@")[-1] if "@" in proxy else proxy
+            print(f"[Proxy #{attempt}] Using {proxy_display} for {url[:60]}...")
+
+            resp = requests.request(
+                method=method,
+                url=url,
+                headers=req_headers,
+                proxies=proxies_dict,
+                stream=stream,
+                timeout=timeout,
+            )
+            if resp.status_code in [403, 429, 502, 503, 504]:
+                print(f"[Proxy #{attempt}] HTTP {resp.status_code} received. Switching proxy...")
+                continue
+
+            resp.raise_for_status()
+            return resp, proxy
+
+        except Exception as e:
+            print(f"[Proxy #{attempt}] Request failed: {e}. Switching proxy...")
+            last_exc = e
+
+    # Fallback attempt: direct connection without proxy
+    try:
+        print("[Direct Connection] Attempting without proxy...")
+        resp = requests.request(
+            method=method,
+            url=url,
+            headers=req_headers,
+            stream=stream,
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        return resp, None
+    except Exception as e:
+        last_exc = e
+
+    raise RuntimeError(f"All proxy attempts failed for {url}. Last error: {last_exc}")
+
+
+def get_video_info(page_url: str) -> tuple[str | None, str | None, str | None]:
+    """
+    Extracts the best quality video URL, selected resolution label, and the video title.
+    Returns: (video_url, quality_label, title)
+    """
+    resp, _ = request_with_retry(page_url, method="GET", timeout=25)
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    # Extract title
+    title = None
+    h1 = soup.find("h1")
+    if h1 and h1.get_text(strip=True):
+        title = h1.get_text(strip=True)
+    elif soup.title and soup.title.string:
+        title = soup.title.string.strip()
+
+    # Find the main video element
+    video = soup.find("video", id=lambda x: x and "html5_api" in x)
+    if not video:
+        video = soup.find("video")
+
+    if not video:
+        return None, None, title
+
+    sources = {}
+    for source in video.find_all("source"):
+        src = source.get("src")
+        label = source.get("label", "").strip().lower()
+        if src:
+            if "2160" in label or "4k" in label:
+                norm_label = "2160p"
+            elif "1080" in label:
+                norm_label = "1080p"
+            elif "720" in label:
+                norm_label = "720p"
+            elif "480" in label:
+                norm_label = "480p"
+            elif "360" in label:
+                norm_label = "360p"
+            else:
+                norm_label = label or "default"
+            sources[norm_label] = urljoin(page_url, src)
+
+    if video.get("src"):
+        sources["current"] = urljoin(page_url, video["src"])
+
+    # Pick the highest available quality
+    for quality in QUALITY_ORDER:
+        if quality in sources:
+            return sources[quality], quality, title
+
+    # Fallback: return any source found
+    if sources:
+        first_k = next(iter(sources.keys()))
+        return sources[first_k], first_k, title
+
+    return None, None, title
+
+
+def download_video(video_url: str, output_path: str, referer: str = None) -> bool:
+    """Downloads a video stream to a local file with progress tracking and proxy support."""
+    download_headers = HEADERS.copy()
+    if referer:
+        download_headers["Referer"] = referer
+
+    # Ensure output folder exists
+    out_dir = os.path.dirname(output_path)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+
+    # Check if file already exists and has size
+    if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+        try:
+            head_resp, _ = request_with_retry(
+                video_url, method="HEAD", headers=download_headers, timeout=15
+            )
+            remote_size = int(head_resp.headers.get("content-length", 0))
+            if remote_size and os.path.getsize(output_path) == remote_size:
+                print(f"[SKIP] Already downloaded: {os.path.basename(output_path)} ({remote_size / (1024*1024):.1f} MB)")
+                return True
+        except Exception:
+            pass
+
+    print(f"Downloading to: {output_path}")
+    temp_path = output_path + ".part"
+
+    try:
+        resp, _ = request_with_retry(
+            video_url, method="GET", headers=download_headers, stream=True, timeout=60
+        )
+        total_size = int(resp.headers.get("content-length", 0))
+
+        if tqdm:
+            with open(temp_path, "wb") as f, tqdm(
+                total=total_size,
+                unit="B",
+                unit_scale=True,
+                unit_divisor=1024,
+                desc=os.path.basename(output_path)[:30],
+            ) as bar:
+                for chunk in resp.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        f.write(chunk)
+                        bar.update(len(chunk))
+        else:
+            downloaded = 0
+            with open(temp_path, "wb") as f:
+                for chunk in resp.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if total_size:
+                            pct = (downloaded / total_size) * 100
+                            print(
+                                f"\rDownloading: {downloaded / (1024*1024):.1f}MB / {total_size / (1024*1024):.1f}MB ({pct:.1f}%)",
+                                end="",
+                                flush=True,
+                            )
+                        else:
+                            print(f"\rDownloading: {downloaded / (1024*1024):.1f}MB", end="", flush=True)
+            print()
+
+        # Rename temp part file to final destination
+        if os.path.exists(output_path):
+            os.remove(output_path)
+        os.rename(temp_path, output_path)
+        print(f"Done: {output_path}")
+        return True
+
+    except Exception as e:
+        print(f"Error downloading {video_url}: {e}")
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        return False
+
+
+def process_urls(urls: list[str]) -> None:
+    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+    total = len(urls)
+    print(f"Total videos to process: {total}\n{'='*60}")
+
+    for idx, page_url in enumerate(urls, start=1):
+        page_url = page_url.strip()
+        if not page_url:
+            continue
+
+        print(f"\n[{idx}/{total}] Fetching page: {page_url}")
+        try:
+            best_url, quality, video_title = get_video_info(page_url)
+            if not best_url:
+                print(f"[{idx}/{total}] No video source found. Skipping.")
+                continue
+
+            print(f"[{idx}/{total}] Selected Quality: {quality.upper() if quality else 'N/A'}")
+
+            # Generate filename
+            if video_title:
+                filename = f"{sanitize_filename(video_title)}.mp4"
+            else:
+                raw_path = urlparse(best_url).path.rstrip("/")
+                name = os.path.basename(raw_path) or f"video_{idx}.mp4"
+                filename = name if name.endswith(".mp4") else f"{name}.mp4"
+
+            dest_path = os.path.join(DOWNLOAD_DIR, filename)
+            download_video(best_url, dest_path, referer=page_url)
+
+        except Exception as e:
+            print(f"[{idx}/{total}] Failed with error: {e}")
+
+    print(f"\n{'='*60}\nAll {total} downloads completed!")
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        if os.path.isfile(sys.argv[1]):
+            with open(sys.argv[1], "r", encoding="utf-8") as f:
+                target_urls = [line.strip() for line in f if line.strip()]
+        else:
+            target_urls = sys.argv[1:]
+    else:
+        target_urls = URLS
+
+    process_urls(target_urls)
