@@ -201,6 +201,14 @@ jobs:
           echo "FFprobe binary: $(which ffprobe)"
           ffmpeg -version | head -n 2
 
+      - name: 🌐 Connect to Cloudflare WARP VPN
+        uses: bxb100/warp-action@v1
+
+      - name: 🔍 Verify Cloudflare WARP Connection
+        run: |
+          echo "Public Egress IP & WARP status:"
+          curl -s https://cloudflare.com/cdn-cgi/trace | grep -E "(ip|warp)" || curl -s https://ifconfig.me || true
+
       - name: 🐍 Setup Python 3.11
         uses: actions/setup-python@v5
         with:
