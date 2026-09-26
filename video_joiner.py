@@ -2236,6 +2236,133 @@ def write_github_step_summary(files: List[MediaFileInfo], analysis: Compatibilit
         pass
 
 
+def format_timestamp_hms(seconds: float) -> str:
+    """Formats seconds into HH:MM:SS or MM:SS for timestamps."""
+    h = int(seconds // 3600)
+    m = int((seconds % 3600) // 60)
+    s = int(seconds % 60)
+    if h > 0:
+        return f"{h:02d}:{m:02d}:{s:02d}"
+    return f"{m:02d}:{s:02d}"
+
+
+def clean_chapter_title(filename_or_title: str) -> str:
+    """Cleans a video filename or raw title into a readable chapter title."""
+    stem = Path(filename_or_title).stem
+    # Remove index prefixes like '01_', '01 - ', '1. '
+    stem = re.sub(r"^\d+[\s._-]+", "", stem)
+    return stem.strip() or filename_or_title
+
+
+def generate_timestamps_file(probed_files: List[MediaFileInfo], output_path: Path) -> Path:
+    """
+    Generates YouTube and media player chapter timestamps file (.txt) alongside the merged output video.
+    Returns the Path to the generated timestamps file.
+    """
+    ts_file = output_path.parent / f"{output_path.stem}_timestamps.txt"
+    root_ts_file = output_path.parent / "merged_video_times_stamp.txt"
+
+    total_duration = sum(f.duration for f in probed_files)
+    
+    lines = [
+        "# ⏱️ Merged Video Timestamps & Chapter List",
+        f"# Output Video: {output_path.name}",
+        f"# Total Videos: {len(probed_files)}",
+        f"# Total Duration: {format_duration(total_duration)} ({format_timestamp_hms(total_duration)})\n",
+        "=" * 80,
+        "🎬 YOUTUBE & MEDIA PLAYER CHAPTER TIMESTAMPS",
+        "=" * 80,
+    ]
+
+    current_sec = 0.0
+    chapter_rows = []
+    for idx, item in enumerate(probed_files, 1):
+        clean_title = clean_chapter_title(item.path.name)
+        start_ts = format_timestamp_hms(current_sec)
+        # Ensure first timestamp in chapter block begins at 00:00:00 or 00:00 for YouTube compliance
+        if idx == 1:
+            start_ts = "00:00:00" if total_duration >= 3600 else "00:00"
+        lines.append(f"{start_ts} - {clean_title}")
+        
+        end_sec = current_sec + item.duration
+        chapter_rows.append({
+            "index": idx,
+            "title": clean_title,
+            "filename": item.path.name,
+            "start": start_ts,
+            "end": format_timestamp_hms(end_sec),
+            "duration": format_duration(item.duration),
+            "size": format_size(item.size_bytes)
+        })
+        current_sec = end_sec
+
+    lines.append("\n" + "=" * 80)
+    lines.append("📋 DETAILED TIMESTAMPS BREAKDOWN (START - END - DURATION)")
+    lines.append("=" * 80)
+    for row in chapter_rows:
+        lines.append(f"{row['index']}. [{row['start']} - {row['end']}] ({row['duration']})")
+        lines.append(f"   Title: {row['title']}")
+        lines.append(f"   File:  {row['filename']} ({row['size']})\n")
+
+    content = "\n".join(lines) + "\n"
+    try:
+        with open(ts_file, "w", encoding="utf-8") as f:
+            f.write(content)
+        with open(root_ts_file, "w", encoding="utf-8") as f:
+            f.write(content)
+        print(f"📝 Timestamps file generated: {ts_file.resolve()}")
+    except Exception as e:
+        print(f"⚠️ Warning: Could not write timestamps file: {e}")
+
+    return ts_file
+
+
+def upload_merged_video_to_youtube(
+    video_path: Path,
+    timestamps_file: Optional[Path] = None,
+    title: Optional[str] = None,
+    privacy: str = "private",
+    category: str = "22",
+    tags: Optional[List[str]] = None
+) -> Optional[str]:
+    """
+    Invokes scripts/upload.py to upload the merged video with timestamps chapters to YouTube.
+    """
+    print(f"\n📺 Auto-uploading merged video to YouTube ({privacy.upper()})...")
+    upload_script = Path(__file__).parent / "scripts" / "upload.py"
+    if not upload_script.is_file():
+        upload_script = Path("scripts/upload.py")
+    
+    if not upload_script.is_file():
+        print(f"⚠️ scripts/upload.py not found at {upload_script.resolve()}. Skipping YouTube auto-upload.")
+        return None
+
+    cmd = [
+        sys.executable,
+        str(upload_script.resolve()),
+        str(video_path.resolve()),
+        "--privacy", privacy,
+        "--category", category,
+    ]
+    if title:
+        cmd.extend(["--title", title])
+    if timestamps_file and timestamps_file.is_file():
+        cmd.extend(["--timestamps-file", str(timestamps_file.resolve())])
+    if tags:
+        cmd.extend(["--tags", ",".join(tags)])
+
+    try:
+        res = subprocess.run(cmd, check=False)
+        if res.returncode == 0:
+            print("✅ YouTube upload completed successfully!")
+            return "success"
+        else:
+            print(f"⚠️ YouTube upload process returned non-zero exit code: {res.returncode}")
+    except Exception as e:
+        print(f"❌ YouTube upload failed with exception: {e}")
+    return None
+
+
 def execute_join(
     files: List[Path],
     output_path: Path,
@@ -2247,7 +2374,12 @@ def execute_join(
     overwrite: bool = False,
     cache_dir: Optional[Path] = None,
     max_runtime_minutes: Optional[int] = None,
-    job_start_time: Optional[float] = None
+    job_start_time: Optional[float] = None,
+    upload_youtube: bool = False,
+    youtube_privacy: str = "private",
+    youtube_title: Optional[str] = None,
+    youtube_category: str = "22",
+    youtube_tags: Optional[List[str]] = None,
 ) -> Tuple[bool, bool]:
     """Execute video joining workflow. Returns: (success: bool, resume_needed: bool)"""
     print(BANNER)
@@ -2330,8 +2462,25 @@ def execute_join(
 
     if success and output_path.is_file():
         print(f"\n🎉 SUCCESS! Merged video saved: {output_path} ({format_size(output_path.stat().st_size)})")
+        
+        # 1. Automatically generate timestamps/chapters file
+        ts_file = generate_timestamps_file(probed_files, output_path)
         set_github_action_output("completed", "true")
         set_github_action_output("resumed_needed", "false")
+        set_github_action_output("timestamps_file", str(ts_file.resolve()))
+
+        # 2. Auto upload to YouTube if enabled
+        if upload_youtube:
+            upload_title = youtube_title or output_path.stem
+            upload_merged_video_to_youtube(
+                video_path=output_path,
+                timestamps_file=ts_file,
+                title=upload_title,
+                privacy=youtube_privacy,
+                category=youtube_category,
+                tags=youtube_tags,
+            )
+
         return True, False
 
     if resume_needed:
@@ -2370,11 +2519,31 @@ def main():
     parser.add_argument("--sort", choices=["natural", "alphabetical", "date", "size", "none"], default="natural", help="Sort order.")
     parser.add_argument("--reverse", action="store_true", help="Reverse sort.")
     parser.add_argument("-y", "--yes", action="store_true", help="Overwrite without asking.")
+    
+    # YouTube Auto-Upload Integration Options
+    parser.add_argument("--upload-youtube", action="store_true", default=False,
+                        help="Automatically upload the merged video with timestamps to YouTube after merge.")
+    parser.add_argument("--youtube-privacy", default="private", choices=["private", "unlisted", "public"],
+                        help="YouTube upload privacy status (default: private).")
+    parser.add_argument("--youtube-title", default=None,
+                        help="Custom title override for YouTube upload (default: output video name).")
+    parser.add_argument("--youtube-category", default="22",
+                        help="YouTube category ID (default: 22 / People & Blogs).")
+    parser.add_argument("--youtube-tags", default=None,
+                        help="Comma-separated tags for YouTube video.")
 
     args = parser.parse_args()
     is_ci = bool(os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"))
     if is_ci:
         args.yes = True
+
+    # Resolve environment overrides for YouTube upload
+    upload_youtube = args.upload_youtube or (os.environ.get("UPLOAD_TO_YOUTUBE", "").strip().lower() in ("1", "true", "yes"))
+    youtube_privacy = os.environ.get("YOUTUBE_PRIVACY") or args.youtube_privacy
+    youtube_title = os.environ.get("YOUTUBE_TITLE") or args.youtube_title
+    youtube_category = os.environ.get("YOUTUBE_CATEGORY") or args.youtube_category
+    youtube_tags_raw = os.environ.get("YOUTUBE_TAGS") or args.youtube_tags
+    youtube_tags = [t.strip() for t in youtube_tags_raw.split(",") if t.strip()] if youtube_tags_raw else None
 
     download_dir = Path(args.download_dir).resolve()
     job_start_time = time.time()
@@ -2466,6 +2635,7 @@ def main():
                 continue
 
             batch_cache = (Path(args.cache_dir) / g.name) if args.cache_dir else (Path(".video_cache") / g.name)
+            batch_yt_title = f"{g.name}" if not youtube_title else f"{youtube_title} - {g.name}"
             success, resume_needed = execute_join(
                 files=input_paths,
                 output_path=target_output,
@@ -2477,7 +2647,12 @@ def main():
                 overwrite=args.yes,
                 cache_dir=batch_cache,
                 max_runtime_minutes=args.max_runtime,
-                job_start_time=job_start_time
+                job_start_time=job_start_time,
+                upload_youtube=upload_youtube,
+                youtube_privacy=youtube_privacy,
+                youtube_title=batch_yt_title,
+                youtube_category=youtube_category,
+                youtube_tags=youtube_tags,
             )
             if resume_needed:
                 print(f"\n💾 Checkpoint preserved for Batch [{idx}/{len(batch_groups)}]: '{g.raw_label}'. Auto-continuation needed.")
@@ -2552,7 +2727,12 @@ def main():
         overwrite=args.yes,
         cache_dir=single_cache,
         max_runtime_minutes=args.max_runtime,
-        job_start_time=job_start_time
+        job_start_time=job_start_time,
+        upload_youtube=upload_youtube,
+        youtube_privacy=youtube_privacy,
+        youtube_title=youtube_title or output_path.stem,
+        youtube_category=youtube_category,
+        youtube_tags=youtube_tags,
     )
 
     if resume_needed:
