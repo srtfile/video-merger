@@ -3,6 +3,8 @@ import os
 import re
 import sys
 import time
+import shutil
+import subprocess
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
@@ -167,11 +169,46 @@ def download_video(video_url: str, output_path: str, referer: str = None) -> boo
     print(f"Downloading to: {output_path}")
     temp_path = output_path + ".part"
 
+    # 1. Try ultra-fast aria2c (16 parallel connections)
+    aria2_bin = "aria2c.exe" if sys.platform == "win32" else "aria2c"
+    aria2_path = shutil.which(aria2_bin) or shutil.which("aria2c")
+    if aria2_path:
+        try:
+            print(f"⚡ [Multi-Threaded Download] Using aria2c (16 parallel streams)...")
+            aria2_cmd = [
+                str(aria2_path),
+                "-x", "16",
+                "-s", "16",
+                "-j", "16",
+                "-k", "1M",
+                "--file-allocation=none",
+                "--header", f"Referer: {download_headers.get('Referer', '')}",
+                "--header", f"User-Agent: {download_headers.get('User-Agent', '')}",
+                "--dir", os.path.dirname(os.path.abspath(output_path)),
+                "--out", os.path.basename(temp_path),
+                "--allow-overwrite=true",
+                "--auto-file-renaming=false",
+                "--summary-interval=1",
+                "--max-tries=3",
+                "--retry-wait=2",
+                video_url
+            ]
+            res = subprocess.run(aria2_cmd)
+            if res.returncode == 0 and os.path.isfile(temp_path) and os.path.getsize(temp_path) > 1024:
+                if os.path.exists(output_path):
+                    os.remove(output_path)
+                os.rename(temp_path, output_path)
+                print(f"✅ [aria2c] Done: {output_path}")
+                return True
+        except Exception as e:
+            print(f"⚠️ aria2c note: {e}")
+
     try:
         resp = request_with_retry(
             video_url, method="GET", headers=download_headers, stream=True, timeout=60
         )
         total_size = int(resp.headers.get("content-length", 0))
+        chunk_size = 4 * 1024 * 1024
 
         if tqdm:
             with open(temp_path, "wb") as f, tqdm(
@@ -181,14 +218,14 @@ def download_video(video_url: str, output_path: str, referer: str = None) -> boo
                 unit_divisor=1024,
                 desc=os.path.basename(output_path)[:30],
             ) as bar:
-                for chunk in resp.iter_content(chunk_size=1024 * 1024):
+                for chunk in resp.iter_content(chunk_size=chunk_size):
                     if chunk:
                         f.write(chunk)
                         bar.update(len(chunk))
         else:
             downloaded = 0
             with open(temp_path, "wb") as f:
-                for chunk in resp.iter_content(chunk_size=1024 * 1024):
+                for chunk in resp.iter_content(chunk_size=chunk_size):
                     if chunk:
                         f.write(chunk)
                         downloaded += len(chunk)
