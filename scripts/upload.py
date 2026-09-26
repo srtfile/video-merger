@@ -167,6 +167,7 @@ def download_from_drive(url: str, dest_dir: str,
     raw_name = title_override or metadata.get("name") or file_id
 
     session = requests.Session()
+    session.trust_env = False  # Direct connection without proxy/VPN for Google Drive
     dl_url = f"https://drive.google.com/uc?export=download&id={file_id}"
     resp = session.get(dl_url, stream=True, timeout=60)
 
@@ -202,7 +203,7 @@ def download_from_drive(url: str, dest_dir: str,
     downloaded = 0
     print(f"🔽 Downloading '{stem}{ext}' from Google Drive …")
     with open(local_path, "wb") as f:
-        for chunk in resp.iter_content(chunk_size=1024 * 1024):
+        for chunk in resp.iter_content(chunk_size=4 * 1024 * 1024):
             if chunk:
                 f.write(chunk)
                 downloaded += len(chunk)
