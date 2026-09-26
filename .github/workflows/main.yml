@@ -70,6 +70,25 @@ on:
         required: false
         type: boolean
         default: false
+      upload_youtube:
+        description: 'Auto-upload merged video with timestamp chapters directly to YouTube?'
+        required: false
+        type: boolean
+        default: false
+      youtube_privacy:
+        description: 'YouTube Video Privacy'
+        required: false
+        type: choice
+        default: 'private'
+        options:
+          - private
+          - unlisted
+          - public
+      youtube_title:
+        description: 'Custom YouTube Video Title (Optional, defaults to output video name)'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: write
@@ -312,7 +331,11 @@ jobs:
             -f join_mode="${{ inputs.join_mode }}" \
             -f preset="${{ inputs.preset || 'veryfast' }}" \
             -f sort_order="${{ inputs.sort_order }}" \
-            -f max_runtime="${{ inputs.max_runtime || 330 }}"
+            -f max_runtime="${{ inputs.max_runtime || 330 }}" \
+            -f upload_release="${{ inputs.upload_release }}" \
+            -f upload_youtube="${{ inputs.upload_youtube }}" \
+            -f youtube_privacy="${{ inputs.youtube_privacy || 'private' }}" \
+            -f youtube_title="${{ inputs.youtube_title }}"
 
       - name: 📤 Upload Merged Video Artifact (${{ matrix.batch.name }})
         if: steps.merge_step.outputs.completed == 'true'
@@ -322,10 +345,35 @@ jobs:
           path: |
             ${{ matrix.batch.output }}
             *.mp4
+            *timestamps.txt
+            merged_video_times_stamp.txt
             !downloads/**
             !.video_cache/**
           if-no-files-found: error
           retention-days: 14
+
+      - name: 📺 Auto-Upload Merged Video to YouTube
+        if: ${{ inputs.upload_youtube == true && steps.merge_step.outputs.completed == 'true' }}
+        env:
+          YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
+          YOUTUBE_CLIENT_SECRETS_JSON: ${{ secrets.YOUTUBE_CLIENT_SECRETS_JSON }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "========================================================"
+          echo "📺 Auto-Uploading Merged Video to YouTube with Timestamps..."
+          echo "========================================================"
+          
+          YT_TITLE="${{ inputs.youtube_title }}"
+          if [ -z "$YT_TITLE" ]; then
+            YT_TITLE="${{ matrix.batch.name }}"
+          fi
+          
+          python scripts/upload.py \
+            "${{ matrix.batch.output }}" \
+            --title "$YT_TITLE" \
+            --privacy "${{ inputs.youtube_privacy || 'private' }}" \
+            --timestamps-file "${{ steps.merge_step.outputs.timestamps_file || 'merged_video_times_stamp.txt' }}"
 
       - name: 🚀 Publish GitHub Release (Optional)
         if: ${{ inputs.upload_release == true && steps.merge_step.outputs.completed == 'true' }}
@@ -335,6 +383,8 @@ jobs:
           name: ${{ matrix.batch.name }} - Run ${{ github.run_id }}
           files: |
             ${{ matrix.batch.output }}
+            *timestamps.txt
+            merged_video_times_stamp.txt
           draft: false
           prerelease: false
           generate_release_notes: true
@@ -346,3 +396,4 @@ jobs:
             - **Workflow Run:** [#${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
             - **Join Mode:** `${{ inputs.join_mode }}`
             - **Transcode Preset:** `${{ inputs.preset || 'veryfast' }}`
+
