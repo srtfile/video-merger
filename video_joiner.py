@@ -1234,6 +1234,7 @@ def download_with_requests(url_or_id: str, dest_dir: Path, index: int = 1) -> Pa
     file_id = extract_gdrive_id(url_or_id)
     download_url = f"https://drive.google.com/uc?id={file_id}&export=download" if file_id else url_or_id
     session = requests.Session()
+    session.trust_env = False  # Direct connection without proxy/VPN for Google Drive
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) VideoJoiner/1.0"}
     
     resp = session.get(download_url, headers=headers, stream=True, allow_redirects=True)
@@ -1308,7 +1309,7 @@ def download_with_requests(url_or_id: str, dest_dir: Path, index: int = 1) -> Pa
     dest_path = dest_dir / filename
     try:
         with open(dest_path, "wb") as f:
-            for chunk in resp.iter_content(chunk_size=128 * 1024):
+            for chunk in resp.iter_content(chunk_size=4 * 1024 * 1024):
                 if chunk:
                     f.write(chunk)
     except Exception:
@@ -1544,7 +1545,7 @@ def download_stream_file(
     referer: str,
     index: int = 1
 ) -> None:
-    """Download video stream with dual engine: requests with fallback to curl."""
+    """Download video stream with high-speed multi-engine: aria2c (16 parallel connections) -> requests (4MB buffer) -> curl."""
     temp_path = target_path.with_name(target_path.name + ".part")
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -1557,13 +1558,50 @@ def download_stream_file(
     }
 
     download_ok = False
-    if requests:
+
+    # 1. Ultra Fast: aria2c multi-segmented downloader (16 connections split)
+    aria2_bin = "aria2c.exe" if sys.platform == "win32" else "aria2c"
+    aria2_path = shutil.which(aria2_bin) or shutil.which("aria2c")
+    if aria2_path:
+        try:
+            print(f"⚡ [Multi-Threaded Download] Using aria2c (16 parallel streams)...")
+            aria2_cmd = [
+                str(aria2_path),
+                "-x", "16",
+                "-s", "16",
+                "-j", "16",
+                "-k", "1M",
+                "--file-allocation=none",
+                "--header", f"Referer: {referer}",
+                "--header", f"User-Agent: {headers['User-Agent']}",
+                "--header", f"Accept: {headers['Accept']}",
+                "--dir", str(temp_path.parent.resolve()),
+                "--out", temp_path.name,
+                "--allow-overwrite=true",
+                "--auto-file-renaming=false",
+                "--summary-interval=1",
+                "--max-tries=3",
+                "--retry-wait=2",
+                "--connect-timeout=15",
+                "--timeout=30",
+                stream_url
+            ]
+            res = subprocess.run(aria2_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            if res.returncode == 0 and temp_path.is_file() and temp_path.stat().st_size > 1024:
+                download_ok = True
+                print(f"⚡ Download finished with aria2c ({format_size(temp_path.stat().st_size)}).")
+        except Exception as e:
+            print(f"⚠️ aria2c note: {e}")
+            download_ok = False
+
+    # 2. Fast Streaming requests (4MB buffer)
+    if not download_ok and requests:
         try:
             with requests.get(stream_url, headers=headers, stream=True, timeout=60) as resp:
                 if resp.status_code == 200:
                     total_size = int(resp.headers.get("content-length", 0))
                     downloaded = 0
-                    chunk_size = 1024 * 1024
+                    chunk_size = 4 * 1024 * 1024  # 4MB buffer for maximum I/O throughput
                     with open(temp_path, "wb") as f:
                         for chunk in resp.iter_content(chunk_size=chunk_size):
                             if chunk:
@@ -1579,7 +1617,7 @@ def download_stream_file(
             print(f"⚠️ requests download note: {e}")
             download_ok = False
 
-    # Fallback to curl
+    # 3. Fallback to curl
     if not download_ok:
         curl_bin = "curl.exe" if sys.platform == "win32" else "curl"
         curl_cmd = [
